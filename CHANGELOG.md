@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**Recorder**
+
+- Pages with embedded frames (forms, widgets, ads) no longer lose their
+  screenshot: the recorder waits up to two seconds for a still-loading frame,
+  and a frame that finishes loading during the shot no longer discards it.
+- When a screenshot is skipped, the side panel's log says why.
+
 ## 0.1.0 (server) and 1.1.0 (Captcher Recorder): first open-source release
 
 Captcher was a hosted service. This release is the same product as a local,

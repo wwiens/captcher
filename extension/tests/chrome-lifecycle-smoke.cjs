@@ -78,7 +78,10 @@ const deadline=setTimeout(()=>{console.error('Chrome smoke test exceeded 120 sec
   await sleep(100);
  }
  assert.equal(state.state,'recording',JSON.stringify(state));
- assert.ok(await cdp.eval(panelSession,'!!walkthrough.initial.screenshot'),'initial viewport screenshot is present: '+JSON.stringify(state));
+ if(!await cdp.eval(panelSession,'!!walkthrough.initial.screenshot')){
+  const shotLog=await cdp.eval(panelSession,'el.log.textContent.split(/(?=\\d\\d:\\d\\d:\\d\\d )/).filter(l=>/screenshot|step-000|recording started/.test(l)).join("\\n")');
+  assert.fail('initial viewport screenshot is present:\n'+shotLog+'\n'+JSON.stringify(state));
+ }
  const pageState=async(id)=>cdp.eval(workerSession,`chrome.scripting.executeScript({target:{tabId:${id}},func:()=>({recorder:!!window.__labRecorder,secretModule:!!self.scSensitive})})`);
  assert.equal((await pageState(tab.id))[0].result.recorder,true);
  const childTab=await cdp.eval(workerSession,`chrome.tabs.create({url:${JSON.stringify(origin+'/child')},openerTabId:${tab.id},active:false})`);

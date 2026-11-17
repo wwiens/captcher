@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 module.exports = async ({cdp,workerSession,panelSession,tab,origin}) => {
   const page = async (body) => (await cdp.eval(workerSession,
     `chrome.scripting.executeScript({target:{tabId:${tab.id}},func:async()=>{${body}}})`))[0].result;
-  const capture = () => cdp.eval(panelSession, `(async()=>{try{const c=await performCapture(await chrome.tabs.get(${tab.id}));return {content:c.content,screenshot:!!c.screenshot};}catch(e){return {error:e.message};}})()`);
+  // shotLog: the panel's last screenshot line, so a missing screenshot fails with its reason.
+  const capture = () => cdp.eval(panelSession, `(async()=>{const shotLog=()=>(el.log.textContent.match(/screenshot (skipped|discarded)[^\\n]*?(?=\\d\\d:\\d\\d:\\d\\d|$)/g)||[]).pop()||'';try{const c=await performCapture(await chrome.tabs.get(${tab.id}));return {content:c.content,screenshot:!!c.screenshot,shotLog:shotLog()};}catch(e){return {error:e.message,shotLog:shotLog()};}})()`);
   const reset = () => page('document.body.innerHTML="<h1>Synthetic test</h1><input id=field>";');
   // Dashboard pages include inline SVG icons and controls inside closed dialogs.
   await reset();
@@ -172,7 +173,7 @@ module.exports = async ({cdp,workerSession,panelSession,tab,origin}) => {
   await page(`const frame=document.createElement('iframe');frame.src=${JSON.stringify(origin.replace('127.0.0.1','localhost')+'/recorded')};document.body.append(frame);await new Promise(resolve=>frame.onload=resolve);`);
   const opaque = await capture();
   assert.ok(!opaque.error, 'cross-origin frame: '+opaque.error);
-  assert.equal(opaque.screenshot,true,'a screenshot is taken with a cross-origin frame');
+  assert.equal(opaque.screenshot,true,'a screenshot is taken with a cross-origin frame: '+opaque.shotLog);
   // App chrome (HubSpot's nav) parks 0x0, display:none and off-screen frames on
   // every page, and forms carry hidden inputs.
   await reset();

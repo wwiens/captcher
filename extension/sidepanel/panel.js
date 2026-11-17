@@ -918,20 +918,49 @@ async function restoreSecrets(tabId, guard) {
 // shot. Returns { blob, viewport } or null — a missing screenshot is never
 // fatal; the HTML snapshot is the capture.
 async function takeViewportScreenshot(tab) {
+  // How long to wait for a tab that is still loading (usually a frame inside
+  // the page) before skipping. Local: tests load this function on its own.
+  const SCREENSHOT_SETTLE_MS = 2000;
   // Track transitions as well as before/after state: switching away and back
   // during capture must invalidate the pixels too.
   let changed = false;
   const activated = (info) => { if (info.windowId === tab.windowId) changed = true; };
+  // An address change, not a bare status flip: Chrome reports the tab as
+  // "loading" while any frame in it loads, so an embed or widget finishing
+  // during the shot used to throw the screenshot away. A real navigation or
+  // reload is still caught, by the documentId compare below.
   const updated = (id, info) => {
-    if (id === tab.id && (info.status === "loading" || info.url)) changed = true;
+    if (id === tab.id && info.url) changed = true;
   };
   const removed = (id) => { if (id === tab.id) changed = true; };
   chrome.tabs.onActivated.addListener(activated);
   chrome.tabs.onUpdated.addListener(updated);
   chrome.tabs.onRemoved.addListener(removed);
-  const stillTarget = async () => {
+  // Why the tab is no longer the one to photograph, or "" while it still is.
+  // Every skip says which, in the log: a silent skip left a recording without
+  // its first screenshot and nothing to tell why.
+  // `loading` asks for a finished load too; only the first check does, after
+  // settle() has given the page its chance to finish.
+  const notTarget = async (loading = false) => {
+    if (changed) return "the tab switched, navigated or closed";
     const [current] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
-    return !changed && current?.id === tab.id && current.url === tab.url && current.status === "complete";
+    if (current?.id !== tab.id) return "another tab is in front";
+    if (current.url !== tab.url) return "the address changed";
+    if (loading && current.status !== "complete") return "the page is still loading";
+    return "";
+  };
+  const stillTarget = async (loading = false) => !await notTarget(loading);
+  // A frame that is still loading (an embed, a widget, an ad) holds the whole
+  // tab at "loading". Give it a moment rather than skipping at once.
+  const settle = async () => {
+    for (let waited = 0; waited < SCREENSHOT_SETTLE_MS; waited += 100) {
+      if (await notTarget(true) !== "the page is still loading") return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  };
+  const skip = async (why, loading = false) => {
+    log(`screenshot skipped — ${why || await notTarget(loading) || "unknown"}`);
+    return null;
   };
   const measure = async () => {
     const [result] = await chrome.scripting.executeScript({
@@ -941,12 +970,14 @@ async function takeViewportScreenshot(tab) {
     return result;
   };
   try {
-    if (!await stillTarget()) return null;
+    await settle();
+    if (!await stillTarget(true)) return await skip("", true);
     const before = await measure();
     const veiled = await veilShield(tab.id, true);
     let dataUrl;
     try {
-      if (veiled < 0 || !await stillTarget()) return null;
+      if (veiled < 0) return await skip("the capture notice could not be hidden");
+      if (!await stillTarget()) return await skip();
       dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     } finally {
       await veilShield(tab.id, false);
@@ -959,7 +990,7 @@ async function takeViewportScreenshot(tab) {
     }
     const blob = await (await fetch(dataUrl)).blob();
     // Decoding is asynchronous too. Keep listeners until the result is committed.
-    if (!await stillTarget()) return null;
+    if (!await stillTarget()) return await skip();
     log(`viewport screenshot — ${formatSize(blob.size)}`);
     return { blob, viewport: before.result };
   } catch (error) {

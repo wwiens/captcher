@@ -161,17 +161,17 @@ test('recorder lease expiry stops observation even if timer dispatch is delayed'
   assert.equal(r.messages.length,0);
 });
 
-function screenshot(switchAt) {
+function screenshot(switchAt,{loadingQueries=0}={}) {
   const events={onActivated:new Event(),onUpdated:new Event(),onRemoved:new Event()};
-  let active=1,captures=0,probes=0;
+  let active=1,captures=0,probes=0,queries=0;const logged=[];
   const switchTab=()=>{active=2;events.onActivated.emit({windowId:5,tabId:2});};
-  const chrome={tabs:{...events,query:async()=>[{id:active,url:active===1?'https://app.example/':'https://mail.example/',status:'complete'}],
-    captureVisibleTab:async()=>{captures++;if(switchAt==='capture')switchTab();if(switchAt==='away-back'){switchTab();active=1;events.onActivated.emit({windowId:5,tabId:1});}return 'data:image/png;base64,AA==';}},
+  const chrome={tabs:{...events,query:async()=>[{id:active,url:active===1?'https://app.example/':'https://mail.example/',status:++queries<=loadingQueries?'loading':'complete'}],
+    captureVisibleTab:async()=>{captures++;if(switchAt==='capture')switchTab();if(switchAt==='frame-load')events.onUpdated.emit(1,{status:'loading'});if(switchAt==='away-back'){switchTab();active=1;events.onActivated.emit({windowId:5,tabId:1});}return 'data:image/png;base64,AA==';}},
     scripting:{executeScript:async()=>{probes++;return [{documentId:switchAt==='document'&&probes>1?'new':'original',result:{width:800,height:600,dpr:1}}];}}};
   const context=vm.createContext({chrome,veilShield:async(id,hide)=>{if(hide&&switchAt==='veil')switchTab();return 1;},
-    log:()=>{},formatSize:()=>'',fetch:async()=>({blob:async()=>new Blob(['image'])}),Blob,JSON});
+    log:(m)=>logged.push(m),formatSize:()=>'',fetch:async()=>({blob:async()=>new Blob(['image'])}),Blob,JSON,setTimeout});
   const s=source('sidepanel/panel.js');vm.runInContext(s.slice(s.indexOf('async function takeViewportScreenshot('),s.indexOf('// One capture of `tab`')),context);
-  return {events,captures:()=>captures,run:()=>context.takeViewportScreenshot({id:1,windowId:5,url:'https://app.example/'})};
+  return {events,logged,captures:()=>captures,run:()=>context.takeViewportScreenshot({id:1,windowId:5,url:'https://app.example/'})};
 }
 for(const phase of ['veil','capture','away-back','document'])test('screenshot discards changes during '+phase,async()=>{
   const s=screenshot(phase);assert.equal(await s.run(),null);
@@ -181,6 +181,18 @@ for(const phase of ['veil','capture','away-back','document'])test('screenshot di
 test('stable screenshot is returned and temporary event listeners are removed',async()=>{
   const s=screenshot();assert.ok((await s.run()).blob);assert.equal(s.captures(),1);
   assert.ok(Object.values(s.events).every(e=>e.listeners.size===0));
+});
+// Chrome holds a whole tab at "loading" while any frame in it loads.
+test('a frame loading during the shot does not discard the screenshot',async()=>{
+  const s=screenshot('frame-load');assert.ok((await s.run()).blob);
+  assert.ok(Object.values(s.events).every(e=>e.listeners.size===0));
+});
+test('a tab still loading gets a moment to finish before the shot',async()=>{
+  const s=screenshot(undefined,{loadingQueries:3});assert.ok((await s.run()).blob);assert.equal(s.captures(),1);
+});
+test('a skipped screenshot says why in the log',async()=>{
+  const s=screenshot('veil');assert.equal(await s.run(),null);
+  assert.ok(s.logged.some(m=>/screenshot skipped — the tab switched/.test(m)),s.logged.join(' | '));
 });
 test('capture shield expires without panel cleanup and ignores releaseHold during capture',()=>{
   const clock=new Clock(),listeners=new Map();
