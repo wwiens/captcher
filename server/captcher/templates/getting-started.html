@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Getting started — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+__THEME_HEAD__
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  .guide-jumps { display:flex; gap:var(--s3) var(--s5); flex-wrap:wrap; margin-top:var(--s4); font-size:var(--type-small); }
+  .guide-start { display:flex; justify-content:space-between; gap:var(--s5); align-items:center; flex-wrap:wrap; margin-bottom:var(--s6); }
+  .guide-start p { max-width:70ch; }
+  .guide-start .button { flex-shrink:0; }
+  .guide-steps { display:flex; flex-direction:column; gap:var(--s5); }
+  .guide-step { display:grid; grid-template-columns:minmax(250px, .85fr) minmax(0, 1.4fr); gap:var(--s6); align-items:start; scroll-margin-top:190px; }
+  .guide-copy > * + * { margin-top:var(--s4); }
+  .guide-copy .panel-title { margin-top:var(--s2); }
+  .guide-copy ol { padding-left:var(--s5); }
+  .guide-copy li + li { margin-top:var(--s3); }
+  .guide-copy li::marker { color:var(--muted); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
+  .guide-shot { margin:0; min-width:0; }
+  .guide-shot > a { display:block; border:1px solid var(--border); border-radius:var(--radius-control); overflow:hidden; cursor:zoom-in; }
+  .guide-shot img { display:block; width:100%; height:auto; }
+  .guide-shot figcaption { margin-top:var(--s3); color:var(--text-soft); font-size:var(--type-small); line-height:1.6; }
+  .guide-shot--recorder { width:100%; max-width:400px; justify-self:center; }
+  #author .guide-shot { width:100%; max-width:420px; justify-self:center; }
+  #edit .guide-shot { width:100%; max-width:300px; justify-self:center; }
+  #share .guide-shot { width:100%; max-width:500px; justify-self:center; }
+  .guide-copy ul.options { list-style:none; padding:0; display:flex; flex-direction:column; gap:var(--s3); }
+  .guide-copy ul.options li { padding:var(--s3) var(--s4); border:1px solid var(--border);
+                              border-radius:var(--radius-control); background:var(--surface-2); }
+  .guide-copy ul.options li + li { margin-top:0; }
+  .guide-end { margin-top:var(--s6); }
+  .guide-end > * + * { margin-top:var(--s4); }
+  .guide-options { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s5); }
+  .guide-options h3 { font-size:var(--type-body); margin-bottom:var(--s2); }
+  .guide-options p { font-size:var(--type-small); color:var(--text-soft); }
+  @media (max-width:850px) { .guide-step { grid-template-columns:minmax(0, 1fr); } }
+  @media (max-width:600px) { .guide-options { grid-template-columns:minmax(0, 1fr); } }
+</style></head><body>
+__TOOLBAR__
+<main class="page">
+  <div class="page-head">
+    <p class="label">Your first walkthrough</p>
+    <h1>Getting started</h1>
+    <p class="page-sub">Perform a task once, and Captcher turns it into a walkthrough someone else can watch and then practice. Five steps from recording to sharing.</p>
+    <nav class="guide-jumps" aria-label="Tutorial steps">
+      <a href="#record">01 · Record</a>
+      <a href="#author">02 · Author</a>
+      <a href="#practice">03 · Try it</a>
+      <a href="#edit">04 · Edit</a>
+      <a href="#share">05 · Share</a>
+    </nav>
+  </div>
+  <aside class="panel guide-start" aria-label="Before you start">
+    <div>
+      <h2 class="panel-title">First, connect the recorder</h2>
+      <p class="page-sub">Use desktop Chrome and install the extension. Open its side panel on a Captcher tab like this one; it connects by itself and shows <strong>Connected</strong>.</p>
+    </div>
+    <a class="button button--secondary" href="/extension">Set up the Chrome extension</a>
+  </aside>
+  <div class="guide-steps">
+    <section class="panel guide-step" id="record" aria-labelledby="record-heading">
+      <div class="guide-copy">
+        <p class="label">Step 01 / Record</p>
+        <h2 class="panel-title" id="record-heading">Show one task from start to finish</h2>
+        <p>Pick a small task, such as finding a customer record or logging a call. Start on the screen a learner would see first.</p>
+        <ol>
+          <li>Open the application you want to teach and the <strong>Captcher Recorder</strong> side panel.</li>
+          <li>Enter a clear walkthrough title and click <strong>Start recording</strong>.</li>
+          <li>Perform the task in order. The recorder captures the screens and actions as you work.</li>
+          <li>Click <strong>Finish &amp; submit</strong> in the panel and wait for the upload to finish.</li>
+        </ol>
+        <p class="notice"><strong>Check:</strong> open <a href="/">Walkthroughs</a>. Your recording appears as a draft in the <strong>Authoring queue</strong>.</p>
+        <p class="field-hint">A recording can be up to __MAX_STEPS__ steps and __MAX_PAGES__ different pages; record a longer task in parts. Recording happens in the live application, so use sample data and a task you are comfortable performing.</p>
+      </div>
+      <figure class="guide-shot guide-shot--recorder">
+        <a href="/static/extension-setup/recorder-ready-2026-11.png" target="_blank" rel="noopener" aria-label="View recording controls screenshot full size">
+          <img src="/static/extension-setup/recorder-ready-2026-11.png" width="400" height="385" loading="lazy" decoding="async" alt="Recorder side panel with the walkthrough title field and Start recording button.">
+        </a>
+        <figcaption>Give the task a name, then start recording. <a href="/static/extension-setup/recorder-ready-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+      </figure>
+    </section>
+    <section class="panel guide-step" id="author" aria-labelledby="author-heading">
+      <div class="guide-copy">
+        <p class="label">Step 02 / Author</p>
+        <h2 class="panel-title" id="author-heading">Let AI write the walkthrough</h2>
+        <ol>
+          <li>Find your draft in the <strong>Authoring queue</strong> on <a href="/">Walkthroughs</a>.</li>
+          <li>Click <strong>Author with AI</strong>. Captcher checks that each captured screen renders, then writes the steps, instructions and hints from your recording.</li>
+          <li>Wait for authoring to finish. The banner above the queue shows what it is doing, and <strong>Stop</strong> ends the pass.</li>
+        </ol>
+        <p class="notice"><strong>Check:</strong> the walkthrough leaves the queue and appears in your library.</p>
+        <p class="field-hint">Authoring calls the Anthropic API with your own key, so each pass is billed to your Anthropic account. <a href="/account">Settings</a> shows whether the key is set and which file it goes in.</p>
+      </div>
+      <figure class="guide-shot">
+        <a href="/static/getting-started/author-with-ai-2026-11.png" target="_blank" rel="noopener" aria-label="View authoring queue screenshot full size">
+          <img src="/static/getting-started/author-with-ai-2026-11.png" width="558" height="528" loading="lazy" decoding="async" alt="A draft card in the Authoring queue, marked Not authored, with the Author with AI button.">
+        </a>
+        <figcaption>Start authoring from the button below your draft. <a href="/static/getting-started/author-with-ai-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+      </figure>
+    </section>
+    <section class="panel guide-step" id="practice" aria-labelledby="practice-heading">
+      <div class="guide-copy">
+        <p class="label">Step 03 / Try it</p>
+        <h2 class="panel-title" id="practice-heading">Check both ways to learn</h2>
+        <ol>
+          <li>Click the walkthrough's title in your library. Choose <strong>Start</strong> to watch it in <strong>Show me</strong>: each step plays with its caption.</li>
+          <li>Switch to <strong>You try</strong> at the top and do the task yourself on the captured screens. Each instruction appears beside the part of the screen to use, and <strong>Hint</strong> is there if you need it.</li>
+          <li>Work through to the end. Make sure each instruction matches the screen and each action moves on correctly.</li>
+        </ol>
+        <p class="notice"><strong>Check:</strong> a new learner could complete the task without you explaining what to do.</p>
+        <p class="field-hint">The player uses captured copies of the screens, so practicing here does not change the live application.</p>
+      </div>
+      <figure class="guide-shot">
+        <a href="/static/getting-started/try-walkthrough-2026-11.png" target="_blank" rel="noopener" aria-label="View walkthrough player screenshot full size">
+          <img src="/static/getting-started/try-walkthrough-2026-11.png" width="1210" height="756" loading="lazy" decoding="async" alt="A walkthrough in You try, with the instruction card beside the Search deals box: click the Search deals box and type Halcyon.">
+        </a>
+        <figcaption>In You try, the instruction sits next to what to use. <a href="/static/getting-started/try-walkthrough-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+      </figure>
+    </section>
+    <section class="panel guide-step" id="edit" aria-labelledby="edit-heading">
+      <div class="guide-copy">
+        <p class="label">Step 04 / Edit</p>
+        <h2 class="panel-title" id="edit-heading">Make the instructions your own</h2>
+        <ol>
+          <li>In <a href="/">Walkthroughs</a>, open the card's <strong>More options</strong> menu and choose <strong>Edit</strong>.</li>
+          <li>On the <strong>Step</strong> tab, select a step and adjust its <strong>Step title</strong>, <strong>Instruction</strong> for You try, <strong>Caption</strong> for Show me, or <strong>Hint</strong>. <strong>Play step</strong> previews it.</li>
+          <li>Click <strong>Save</strong>, then play the walkthrough again to check the result.</li>
+        </ol>
+        <p class="notice"><strong>Check:</strong> the wording is clear and the walkthrough still works from start to finish.</p>
+        <p class="field-hint">For a bigger change, open the <strong>AI assist</strong> tab and describe it in plain words, or ask a question about the walkthrough. Every change can be undone.</p>
+      </div>
+      <figure class="guide-shot">
+        <a href="/static/getting-started/edit-walkthrough-2026-10.png" target="_blank" rel="noopener" aria-label="View walkthrough editor screenshot full size">
+          <img src="/static/getting-started/edit-walkthrough-2026-10.png" width="340" height="852" loading="lazy" decoding="async" alt="The editor's Step tab with the step title, instruction, caption and hint fields, Play step, Save, and the AI assist tab.">
+        </a>
+        <figcaption>Edit a step's wording, then save. <a href="/static/getting-started/edit-walkthrough-2026-10.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+      </figure>
+    </section>
+    <section class="panel guide-step" id="share" aria-labelledby="share-heading">
+      <div class="guide-copy">
+        <p class="label">Step 05 / Share</p>
+        <h2 class="panel-title" id="share-heading">Choose how learners will open it</h2>
+        <p>On the walkthrough card, open <strong>More options → Download…</strong>. Choose a brand and a format, then click <strong>Download</strong>.</p>
+        <ol>
+          <li><strong>Single HTML file:</strong> share one file that learners can open in a browser.</li>
+          <li><strong>Folder (.zip):</strong> get an HTML page and its supporting assets together.</li>
+          <li><strong>SCORM 2004 or SCORM 1.2:</strong> upload the ZIP to your learning management system, using the version it supports.</li>
+        </ol>
+        <p>For a website, choose <strong>More options → Embed…</strong> instead. Click <strong>Enable embedding</strong>, then <strong>Copy code</strong> and add it to your site.</p>
+        <p class="notice"><strong>Check:</strong> open the download, or test the walkthrough where learners will use it. Enabling embedding makes that walkthrough publicly accessible.</p>
+        <p class="field-hint">Downloads play offline, with no server required, and you can download again as often as you like.</p>
+      </div>
+      <figure class="guide-shot">
+        <a href="/static/getting-started/download-walkthrough-2026-10.png" target="_blank" rel="noopener" aria-label="View download dialog screenshot full size">
+          <img src="/static/getting-started/download-walkthrough-2026-10.png" width="576" height="561" loading="lazy" decoding="async" alt="Download standalone walkthrough dialog with Brand, Format, Include the intro page and Download controls.">
+        </a>
+        <figcaption>Choose your brand and delivery format here. <a href="/static/getting-started/download-walkthrough-2026-10.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+      </figure>
+    </section>
+  </div>
+  <section class="panel guide-end" aria-labelledby="next-heading">
+    <p class="label">Keep going</p>
+    <h2 class="panel-title" id="next-heading">Your next walkthrough</h2>
+    <div class="guide-options">
+      <div><h3>Organize your library</h3><p>Use <strong>New collection</strong> on Walkthroughs, then a card's <strong>Add to collection…</strong> option to group related tasks.</p></div>
+      <div><h3>Use your branding</h3><p>Set up colors, fonts and a logo in <a href="/branding">Brand profile</a>. Choose it when you download or embed a walkthrough.</p></div>
+      <div><h3>Settings</h3><p><a href="/account">Settings</a> shows your connected browsers and your API key status, and the <a href="/extension#troubleshooting">extension guide</a> covers setup problems.</p></div>
+    </div>
+    <a class="button button--primary" href="/">Open Walkthroughs</a>
+    <p class="field-hint">Screenshots show the actual app with example content recorded from a demo CRM. Your titles and screens will differ.</p>
+  </section>
+</main>
+</body></html>

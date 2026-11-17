@@ -1,0 +1,6 @@
+# Root .gitignore covers secrets, OS and editor files.
+dist/
+.e2e/
+node_modules/
+*.zip
+*.crx

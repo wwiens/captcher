@@ -1,0 +1,6 @@
+title: Captcher
+description: Record a task in your browser and turn it into an interactive training walkthrough. Self-hosted, open source.
+# GitHub Pages builds this folder with its default Jekyll theme.
+exclude:
+  - contract.md
+  - pairing.md

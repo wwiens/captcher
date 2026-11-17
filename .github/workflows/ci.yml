@@ -1,0 +1,75 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    env:
+      # Contract tests must fail, not skip, if the extension folder goes missing.
+      CAPTCHER_REQUIRE_EXTENSION: "1"
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: uv sync --locked --python 3.13 --extra dev
+      - run: uv run python -m playwright install --with-deps chromium
+      - run: uv run ruff check .
+      - run: uv run pytest
+      - name: The wheel carries the recorder extension, without its tests
+        run: |
+          uv build --out-dir "$RUNNER_TEMP/dist"
+          uv run python - "$RUNNER_TEMP"/dist/*.whl <<'PY'
+          import sys, zipfile
+          names = zipfile.ZipFile(sys.argv[1]).namelist()
+          assert "captcher/extension/manifest.json" in names, "extension missing from the wheel"
+          assert not [n for n in names if n.startswith("captcher/extension/tests/")], "extension tests shipped"
+          print(sum(n.startswith("captcher/extension/") for n in names), "extension files in the wheel")
+          PY
+
+  extension:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+        chrome: [152.0.7977.82, 153.0.8010.36]
+    runs-on: ${{ matrix.os }}
+    env:
+      SC_CHROME_VERSION: ${{ matrix.chrome }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests and archive validation
+        run: |
+          node --test tests/*.test.cjs
+          bash package.sh
+          version=$(python -c 'import json;print(json.load(open("manifest.json"))["version"])')
+          python scripts/verify-package.py "dist/captcher-recorder-$version.zip"
+          python -m zipfile -e "dist/captcher-recorder-$version.zip" "$RUNNER_TEMP/extension-candidate"
+      - name: Install pinned Chrome for Testing
+        run: |
+          python scripts/install-test-chrome.py "$RUNNER_TEMP/sc-chrome" > chrome-path.txt
+          echo "CHROME_TEST_BINARY=$(cat chrome-path.txt)" >> "$GITHUB_ENV"
+          echo "SC_EXTENSION_ROOT=$RUNNER_TEMP/extension-candidate" >> "$GITHUB_ENV"
+      - name: Test packaged extension in native Chrome side panel
+        run: node tests/chrome-lifecycle-smoke.cjs --redaction --release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extension-${{ matrix.os }}-${{ matrix.chrome }}
+          path: extension/dist/*.zip

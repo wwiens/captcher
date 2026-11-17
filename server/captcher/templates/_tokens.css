@@ -1,0 +1,14 @@
+
+  /* captcher tokens now live in one place: static/captcher.css, which every
+     server-rendered page links. Keeping them there rather than inlining them
+     per page means the spectrum, the type scale and the 4px lattice cannot drift
+     between the catalog and the sign-in card.
+
+     This file stays because it is still inlined by server._chrome() and by the
+     auth pages; it is deliberately empty. Anything page-specific belongs in
+     that page's own <style> block, and anything shared belongs in
+     static/captcher.css.
+
+     The tokens here were never white-label slots and still are not. The
+     white-label slots are player.css / player2.css's --primary, --accent, --bg
+     …, which export.apply_branding() writes over per brand profile. */

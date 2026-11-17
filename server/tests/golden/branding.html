@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Your brand — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+<!-- Appearance, resolved before the first paint.
+
+     This must be an INLINE, synchronous script in <head>. An external file, a
+     defer, or anything that runs after the body parses means the page paints
+     in the wrong theme first and flips — the exact flash a theme toggle exists
+     to avoid. It is small and it does not touch the network, so it costs one
+     parse.
+
+     Three states, not two. Light is the default (Brand Guide v1 is light-first):
+     a browser with nothing stored gets "light". "system" is an explicit choice
+     and is not a value that ever reaches the DOM: the OS answer is resolved
+     here — dark only when the OS asks for dark — and an explicit
+     data-sc-theme="light"|"dark" is stamped on <html>, so the stylesheet only
+     needs its one [data-sc-theme="dark"] block and no prefers-color-scheme
+     media query has to be kept in step with it.
+
+     The choice lives in localStorage, per browser, alongside the catalog's
+     sc-collections-collapsed. The key is unchanged from earlier releases, so a
+     stored "system" or "dark" is honoured. Nothing is sent to the server and
+     nothing is read from the member row, so this file is the whole of the
+     mechanism and a signed-out page could adopt it unchanged.
+
+     Storage can throw outright — Safari in private browsing, and any browser
+     set to block site data — so every access is wrapped. A failed read is
+     "light", which is the same answer a first visit gets. -->
+<script>
+(function () {
+  var KEY = "sc-theme";
+  var root = document.documentElement;
+  var media = window.matchMedia("(prefers-color-scheme: dark)");
+  var choice;
+  try { choice = localStorage.getItem(KEY); } catch (e) { choice = null; }
+  if (choice !== "system" && choice !== "dark") choice = "light";
+
+  function paint() {
+    var resolved = choice === "system" ? (media.matches ? "dark" : "light") : choice;
+    root.setAttribute("data-sc-theme", resolved);
+    // The browser paints its own chrome (the address bar on mobile, the space
+    // beyond an overscroll) from this, so a stale one leaves a dark band above
+    // a light page.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#F2F3F7" : "#0F1117");
+    root.dispatchEvent(new CustomEvent("sc:theme", { detail: { choice: choice, resolved: resolved } }));
+  }
+  paint();
+
+  // Follow the OS live, but only while the choice is System — someone who
+  // picked Dark explicitly does not want their laptop's sunrise schedule
+  // overruling them. addListener is the pre-2021 Safari spelling.
+  var onSystemChange = function () { if (choice === "system") paint(); };
+  if (media.addEventListener) media.addEventListener("change", onSystemChange);
+  else if (media.addListener) media.addListener(onSystemChange);
+
+  // The only writer is the Appearance control on /account. Exposed on window
+  // rather than imported because every page carries this script and only one
+  // page has a control; there is no module system here to hang it off.
+  window.scTheme = {
+    get: function () { return choice; },
+    set: function (next) {
+      choice = (next === "system" || next === "dark") ? next : "light";
+      try { localStorage.setItem(KEY, choice); } catch (e) {}
+      paint();
+      return choice;
+    }
+  };
+})();
+</script>
+
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<!-- font-preload: start the two faces every page paints in downloading
+     alongside fonts.css rather than after the browser has parsed it. Without
+     these the chain is HTML -> fonts.css -> woff2, three serial round trips
+     before a real glyph appears, and the page shows system sans until the
+     last one lands. DM Sans is the body; Outfit (one variable file) sets every heading above it.
+     export.py strips this block: the offline builds inline or relocate their
+     fonts, so these hrefs would be dead there. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  /* Page-local CSS is layout only. Every colour, border weight, radius, type
+     size and control style comes from static/captcher.css — .button, .input,
+     .select, .field, .panel, .notice, .pill, .label, .inline-status. The two
+     exceptions are called out where they appear: the colour rows, whose
+     markup server.py builds, and the live preview, which is a customer's own
+     palette rendered as data rather than as Captcher chrome. */
+  .page { max-width: 1160px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 372px; gap:var(--s7); align-items:start; }
+  form { min-width:0; }
+  .section { margin:0 0 var(--s5); }
+  .section > :last-child { margin-bottom:0; }
+
+  /* Profile switcher — the row that says which brand you are editing. */
+  .profilebar { display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap; margin-bottom:var(--s5); }
+  .pb-select { display:flex; align-items:center; gap:var(--s3); }
+  .pb-select .select { width:auto; min-width:210px; }
+  .pb-actions { display:flex; gap:var(--s2); margin-left:auto; }
+
+  /* Import from a URL. */
+  .importbar { display:flex; align-items:flex-start; gap:var(--s5); flex-wrap:wrap; margin-bottom:var(--s5); }
+  .ib-copy { flex:1 1 260px; min-width:220px; display:flex; flex-direction:column; gap:var(--s1); }
+  .ib-copy .field-hint { max-width:52ch; }
+  .ib-row { display:flex; gap:var(--s2); flex:1 1 320px; min-width:260px; }
+  .ib-row .input { flex:1; min-width:0; }
+  #fetch-status { flex-basis:100%; }
+
+  /* Logo and icon rows: a URL field with its own preview well beside it. */
+  .url-row { display:flex; gap:var(--s3); align-items:flex-start; }
+  .url-row .field { flex:1; min-width:0; }
+  .thumb { width:52px; height:52px; flex:none; margin-top:22px;
+           border:var(--line) solid var(--border); border-radius:var(--radius-control);
+           background:var(--surface) center/contain no-repeat; }
+  .thumb.empty { background-image:none; }
+
+  /* Colour palette. The swatches show a customer's arbitrary colours — that
+     is data, not chrome, and exempt from the accent budget. The chrome around
+     them is not: nothing here introduces an accent.
+     server.py builds these rows and gives .cr-hex the system's .input and
+     .input--mono classes, so only the compact overrides live here. */
+  .colors { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4) var(--s6); }
+  .color-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s3); }
+  .cr-info { min-width:0; }
+  .cr-label { display:block; font-size:var(--type-small); font-weight:var(--weight-medium); line-height:1.4; }
+  .cr-help { display:block; font-size:12px; line-height:1.45; color:var(--muted); }
+  .cr-input { display:flex; align-items:center; gap:var(--s2); flex:none; }
+  .cr-swatch { width:34px; height:34px; flex:none; padding:0; cursor:pointer; overflow:hidden;
+               background:none; border:var(--line) solid var(--border);
+               border-radius:var(--radius-control);
+               -webkit-appearance:none; -moz-appearance:none; appearance:none; }
+  .cr-swatch::-webkit-color-swatch-wrapper { padding:0; }
+  .cr-swatch::-webkit-color-swatch { border:none; }
+  .cr-swatch::-moz-color-swatch { border:none; }
+  .cr-hex { width:86px; min-height:34px; padding:7px 9px; font-size:12px;
+            text-transform:uppercase; }
+  .cr-hex.bad { border-color:var(--error); }
+
+  /* Font picker: a combobox whose options render in their own typeface. */
+  .fontpick { position:relative; }
+  .fontpick .input { padding-right:30px; }
+  .fontpick-caret { position:absolute; right:11px; top:50%; transform:translateY(-50%);
+                    line-height:1; color:var(--muted); pointer-events:none; }
+  .fontpick-panel { position:absolute; z-index:40; left:0; right:0; top:calc(100% + 2px);
+                    max-height:290px; overflow-y:auto; padding:var(--s1);
+                    background:var(--surface); border:var(--line) solid var(--border); }
+  .fp-opt { display:flex; align-items:baseline; justify-content:space-between; gap:var(--s3);
+            padding:7px 9px; font-size:16px; line-height:1.2; cursor:pointer;
+            white-space:nowrap; overflow:hidden; }
+  .fp-name { overflow:hidden; text-overflow:ellipsis; }
+  .fp-opt:hover, .fp-opt.active { background:var(--surface-2); }
+  .fp-opt.sel { box-shadow:inset 0 0 0 var(--line) var(--text); }
+  .fp-cat { flex:none; }
+  .fp-empty, .fp-more { padding:8px 9px; }
+  #webfont-note { margin-top:var(--s1); }
+  #webfont-note code { padding:1px 5px; background:var(--surface-2); word-break:break-all; }
+
+  .actions { display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap; }
+  /* Read-only is carried by disabled inputs and the Read-only badge; the
+     hints stay at full strength so the built-in profile still explains itself. */
+  form.locked input { cursor:not-allowed; }
+
+  /* Live preview. Everything inside .pv-frame is drawn from --b-*, which the
+     preview writes from the profile being edited: it is a picture of the
+     customer's export, not Captcher chrome. The values below are only the
+     defaults that hold until render() runs. */
+  .preview { position:sticky; top:88px; }
+  .pv-label { display:block; margin-bottom:var(--s2); }
+  .pv-frame { --b-primary:#3B49C6; --b-accent:#0A6FA8; --b-accent-text:#0A6FA8;
+              --b-bg:#F2F3F7; --b-surface:#FFFFFF;
+              --b-text:#14151A; --b-muted:#6B6F7B; --b-border:#E6E7EC;
+              --b-ok:#0B7A5A; --b-bad:#B83227;
+              --b-head:"Outfit"; --b-body:"DM Sans";
+              border:var(--line) solid var(--border); border-radius:var(--radius-container); overflow:hidden;
+              background:var(--b-bg); font-family:var(--b-body),sans-serif; }
+  /* captcher.css sets `strong, b { color: var(--text) }` on every b in the
+     app, and that reaches in here and paints the two wordmarks in the APP's
+     theme colour rather than the profile's — near-white #ECECF5 on a customer's
+     light card, which is not a colour their export will ever use. Nothing
+     inside .pv-frame may take an app token. The semibold weight is still wanted;
+     only the colour is not, so the wordmarks fall back to inheriting --b-text
+     from .pv-topbar and .pv-cardbrand. */
+  .pv-frame b, .pv-frame strong { color:inherit; }
+  /* A surface step under a single hairline — the player's bar exactly as the
+     export draws it. It is not filled with a hue: a filled bar here would show
+     the customer a screen their export will never produce. */
+  .pv-topbar { display:flex; align-items:center; justify-content:space-between; gap:var(--s3);
+               height:44px; padding:0 var(--s3);
+               background:var(--b-surface); color:var(--b-text);
+               border-bottom:var(--line) solid var(--b-border); }
+  .pv-brand { display:flex; align-items:center; gap:var(--s2); min-width:0;
+              font-family:var(--b-head),sans-serif; font-size:15px; line-height:1.2; }
+  .pv-brand img, .pv-cardbrand img { height:20px; width:auto; max-width:96px; display:none; }
+  .pv-brand img.on, .pv-cardbrand img.on { display:block; }
+  .pv-progress { flex:none; font-size:10px; letter-spacing:.1em; color:var(--b-muted); }
+  .pv-card { margin:var(--s4); padding:var(--s4); border-radius:var(--radius-control);
+             background:var(--b-surface); border:var(--line) solid var(--b-border); }
+  .pv-cardbrand { display:flex; align-items:center; gap:var(--s2); margin-bottom:var(--s3);
+                  font-family:var(--b-head),sans-serif; font-size:15px; color:var(--b-text); }
+  .pv-eyebrow { margin-bottom:6px; font-size:10px; font-weight:var(--weight-semibold);
+                letter-spacing:.08em; text-transform:uppercase; color:var(--b-accent-text); }
+  .pv-title { margin-bottom:7px; font-family:var(--b-head),sans-serif;
+              font-size:19px; line-height:1.2; color:var(--b-text); }
+  .pv-scenario { margin:0 0 var(--s3); font-size:12px; line-height:1.5; color:var(--b-muted); }
+  .pv-btns { display:flex; gap:var(--s2); margin-bottom:var(--s3); }
+  .pv-btn { padding:7px 13px; font-size:12px; font-weight:var(--weight-medium); line-height:1.25;
+            border:var(--line) solid transparent; border-radius:var(--radius-control); }
+  .pv-primary { background:var(--b-primary); border-color:var(--b-primary); color:var(--b-bg); }
+  .pv-secondary { background:var(--b-surface); border-color:var(--b-border); color:var(--b-text); }
+  .pv-feedback { display:flex; gap:var(--s4); font-size:11px; font-weight:var(--weight-medium); }
+  .pv-ok { color:var(--b-ok); }
+  .pv-bad { color:var(--b-bad); }
+  .pv-foot { padding:0 var(--s3) var(--s4); text-align:center;
+             font-size:11px; line-height:1.5; color:var(--b-muted); }
+  .pv-foot .attr { display:block; margin-top:3px; font-size:10px; }
+
+  @media (max-width:900px) { .layout { grid-template-columns:1fr; } .preview { position:static; } }
+  @media (max-width:640px) { .colors { grid-template-columns:1fr; } .pb-actions { margin-left:0; } }
+</style></head><body>
+<header class="site-header app-sidebar" id="top">
+  <div class="nav-wrap">
+    <a class="brand-lockup" href="/" aria-label="Captcher home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 526 526" fill="none" aria-hidden="true" class="brand-svg" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTowNTFmMGY1YS03N2FlLTQ0YzUtYjc4OC02NjNlMDg4ZjJiYzgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaBtVtipGlWp5nkJeoDcMkPYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyNzIyNWFhOC0xNThkLTQxNWUtYjY5Ny01MWZiZDljNjZjNGFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo7ngJcOiuhiHL9la+jaJ1fwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggG3czPT5AiP7z/ZvL4WIYhLL1Jacc9HCfLWG/wKA51aOkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaKNZQnzAKKVSE9WaR7PCUxkAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCCdBgmDtiH2w62FT8QpfO9fI40+0uIX5AtKqMTm0RrCA2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBjLZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjA1MWYwZjVhLTc3YWUtNDRjNS1iNzg4LTY2M2UwODhmMmJjOC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmJiOWVkMTAwLThhNTgtNDg4OS1iZGFlLTJkODYxYTQ3YzYwY3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAbdzM9PkCI/vP9m8vhYhiEsvUlpxz0cJ8tYb/AoDnVo6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggTcuhKrTf5FatlZvCygCuGf36PEOCDnZpPu0XRtuR9v6iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIPb3KywRlkOpXUuKc8sfaBYoX8RVmVodGy0tFE4ySBN0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQCvByNMV60jXCO+oiBC+FzL+S12xWLwDhVS452/dLe6ZGeJzH94HZ9LsnMtHFV+tmHowdwx7vgwNNZdr9YvKWys=</c2pa:manifest></metadata><rect x="230" y="0" width="296" height="50" fill="currentColor"/><rect x="476" y="0" width="50" height="270" fill="currentColor"/><rect x="0" y="256" width="50" height="270" fill="currentColor"/><rect x="0" y="476" width="296" height="50" fill="currentColor"/><rect x="0" y="0" width="72" height="72" fill="#FF6A5C"/><rect x="92" y="92" width="90" height="90" fill="#29B6FF"/><rect x="202" y="202" width="122" height="122" fill="#3B49C6"/><rect x="344" y="344" width="90" height="90" fill="#3ECFA2"/><rect x="454" y="454" width="72" height="72" fill="#FF6A5C"/></svg>
+<span class="brand-word">Captcher</span></a>
+    <nav class="nav-right" aria-label="Main navigation">
+      <a class="nav-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M10 8.8v6.4l5.2-3.2z"/></svg>Walkthroughs</a>
+      <a class="nav-link active" href="/branding" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21a9 9 0 1 1 9-9c0 2.2-1.8 3.5-4 3.5h-1.8a1.7 1.7 0 0 0-1.3 2.8 1.7 1.7 0 0 1-1.3 2.7z"/><circle cx="7.5" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r=".9" fill="currentColor" stroke="none"/></svg>Brand profile</a>
+      <a class="nav-link" href="/getting-started"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-5A1.5 1.5 0 0 1 3 16z"/><path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>Getting started</a>
+      <a class="nav-link" href="/extension"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4.5a2.5 2.5 0 0 1 5 0V6h3a1 1 0 0 1 1 1v3h1.5a2.5 2.5 0 0 1 0 5H18v3a1 1 0 0 1-1 1h-3v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3z"/></svg>Chrome extension</a>
+      <a class="nav-link" href="/account"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.75"/><path d="M4.75 20a7.25 7.25 0 0 1 14.5 0"/></svg>Settings</a>
+      <a class="nav-link" href="/usage"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>AI spend</a>
+    </nav>
+  </div>
+</header>
+<!-- Pairing lives on the shared chrome rather than on /account, so the
+     extension can start pairing from whichever Captcher page is open instead
+     of first telling them to navigate somewhere. It adds no UI and does
+     nothing until asked. The unlock page has no sidebar, so a locked server
+     cannot answer — which is correct, since it has no owner to mint for. -->
+<script src="/static/pair.js"></script>
+
+<main class="page">
+  <div class="page-head">
+    <h1>Your brand</h1>
+    <p class="page-sub">Define how an exported walkthrough looks when another company runs it on their own site or app. Pick a profile in the Download dialog when exporting, and its colours, fonts, logo, wordmark and favicon are applied to the standalone file. Logos and icons are referenced by URL; nothing is uploaded here.</p>
+  </div>
+
+  <!-- The row that says which brand you are editing, so it sits above
+       everything it changes. -->
+  <div class="panel profilebar">
+    <label class="pb-select" for="profile-select">
+      <span class="field-label">Profile</span>
+      <select class="select" id="profile-select"></select>
+    </label>
+    <span class="pill" id="ro-badge" style="display:none">Read-only</span>
+    <div class="pb-actions">
+      <button type="button" class="button button--secondary button--sm" id="btn-new">New profile</button>
+      <button type="button" class="button button--tertiary button--sm" id="btn-dup">Duplicate</button>
+      <button type="button" class="button button--danger button--sm" id="btn-del">Delete</button>
+    </div>
+  </div>
+
+  <div class="panel importbar" id="importbar" style="display:none">
+    <div class="ib-copy">
+      <p class="panel-title">Import from a website</p>
+      <p class="field-hint">Paste a company&rsquo;s URL. Captcher reads the page and infers the brand name, tagline, colours, fonts and logo for this profile. Review every field before saving.</p>
+    </div>
+    <div class="ib-row">
+      <input type="text" class="input" id="brand_url" placeholder="acme.com or https://acme.com"
+             autocomplete="off" aria-label="Company URL">
+      <button type="button" class="button button--secondary" id="btn-fetch-brand">Fetch brand</button>
+    </div>
+    <span class="status inline-status inline-status--muted" id="fetch-status"></span>
+  </div>
+
+  <div class="layout">
+    <form id="brand-form" autocomplete="off">
+      <section class="panel section" aria-labelledby="sec-identity">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sec-identity">Identity</h2>
+        </div>
+        <div class="field">
+          <label class="field-label" for="brand_name">Brand name</label>
+          <input type="text" class="input" id="brand_name" maxlength="80" placeholder="Acme Inc.">
+        </div>
+        <div class="field">
+          <label class="field-label" for="tagline">Tagline</label>
+          <input type="text" class="input" id="tagline" maxlength="160"
+                 placeholder="One run-through is the training.">
+          <p class="field-hint">Shown on the intro and completion screens.</p>
+        </div>
+      </section>
+
+      <section class="panel section" aria-labelledby="sec-assets">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sec-assets">Logo and icon</h2>
+          <p class="panel-sub">Image URLs. Nothing is uploaded.</p>
+        </div>
+        <div class="url-row">
+          <div class="field">
+            <label class="field-label" for="logo_light_url">Logo — light backgrounds</label>
+            <input type="url" class="input" id="logo_light_url" placeholder="https://acme.com/logo.svg">
+            <p class="field-hint">The version drawn for a light ground — dark ink. Used on
+              the intro and completion cards and in the top bar whenever this profile's
+              Surface colour is light. An SVG or PNG URL.</p>
+          </div>
+          <span class="thumb empty" data-thumb="logo_light_url"></span>
+        </div>
+        <div class="url-row">
+          <div class="field">
+            <label class="field-label" for="logo_dark_url">Logo — dark backgrounds</label>
+            <input type="url" class="input" id="logo_dark_url" placeholder="https://acme.com/logo-white.svg">
+            <p class="field-hint">The reversed version — light ink. Used in those same
+              two places whenever this profile's Surface colour is dark, which is what
+              the Captcher palette is. Set only one of the two and it is used on
+              either ground.</p>
+          </div>
+          <span class="thumb empty" data-thumb="logo_dark_url" style="background-color:#14151A"></span>
+        </div>
+        <div class="url-row">
+          <div class="field">
+            <label class="field-label" for="favicon_url">Favicon</label>
+            <input type="url" class="input" id="favicon_url" placeholder="https://acme.com/favicon.png">
+            <p class="field-hint">Browser-tab icon for the exported file.</p>
+          </div>
+          <span class="thumb empty" data-thumb="favicon_url"></span>
+        </div>
+      </section>
+
+      <section class="panel section" aria-labelledby="sec-colour">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sec-colour">Colour palette</h2>
+          <p class="panel-sub">Ten slots, mapped onto the exported player&rsquo;s tokens.</p>
+        </div>
+        <div class="colors"><div class="color-row"><div class="cr-info"><span class="cr-label">Primary</span><span class="cr-help">Buttons and the top bar&#x27;s active state. It carries text, so it has to stay readable on Background.</span></div><div class="cr-input"><input type="color" data-color="primary" class="cr-swatch" aria-label="Primary colour"><input type="text" data-hex="primary" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Primary hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Primary (hover)</span><span class="cr-help">Primary&#x27;s hover and pressed state. A darker step of the same hue, not a different colour.</span></div><div class="cr-input"><input type="color" data-color="primary_hover" class="cr-swatch" aria-label="Primary (hover) colour"><input type="text" data-hex="primary_hover" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Primary (hover) hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Accent</span><span class="cr-help">The active target, progress, the spotlight — light rather than paint. Reserved — never a text colour.</span></div><div class="cr-input"><input type="color" data-color="accent" class="cr-swatch" aria-label="Accent colour"><input type="text" data-hex="accent" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Accent hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Background</span><span class="cr-help">The page behind cards and the step rail.</span></div><div class="cr-input"><input type="color" data-color="background" class="cr-swatch" aria-label="Background colour"><input type="text" data-hex="background" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Background hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Surface</span><span class="cr-help">Cards and panels, raised one step above Background.</span></div><div class="cr-input"><input type="color" data-color="surface" class="cr-swatch" aria-label="Surface colour"><input type="text" data-hex="surface" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Surface hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Text</span><span class="cr-help">Body copy and headings — almost everything a learner reads.</span></div><div class="cr-input"><input type="color" data-color="text" class="cr-swatch" aria-label="Text colour"><input type="text" data-hex="text" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Text hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Muted text</span><span class="cr-help">Secondary text: hints, counts, captions.</span></div><div class="cr-input"><input type="color" data-color="muted" class="cr-swatch" aria-label="Muted text colour"><input type="text" data-hex="muted" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Muted text hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Border</span><span class="cr-help">Hairlines around cards, inputs and the captured stage.</span></div><div class="cr-input"><input type="color" data-color="border" class="cr-swatch" aria-label="Border colour"><input type="text" data-hex="border" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Border hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Success</span><span class="cr-help">Correct-answer feedback in You-try. Never set this to your accent: the accent means look here, success means you were right.</span></div><div class="cr-input"><input type="color" data-color="success" class="cr-swatch" aria-label="Success colour"><input type="text" data-hex="success" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Success hex value"></div></div><div class="color-row"><div class="cr-info"><span class="cr-label">Error</span><span class="cr-help">Wrong-answer feedback in You-try.</span></div><div class="cr-input"><input type="color" data-color="error" class="cr-swatch" aria-label="Error colour"><input type="text" data-hex="error" class="cr-hex input input--mono" maxlength="7" spellcheck="false" aria-label="Error hex value"></div></div></div>
+      </section>
+
+      <section class="panel section" aria-labelledby="sec-type">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sec-type">Typography</h2>
+          <span class="label" id="fonts-source-note">Google Fonts</span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="font_heading">Heading font</label>
+          <div class="fontpick" data-target="font_heading">
+            <input type="text" id="font_heading" class="input fontpick-input" maxlength="120"
+                   spellcheck="false" autocomplete="off" placeholder="Outfit"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="fp-panel-heading">
+            <span class="fontpick-caret" aria-hidden="true">&#9662;</span>
+            <div class="fontpick-panel" id="fp-panel-heading" role="listbox" hidden></div>
+          </div>
+          <p class="field-hint">Headlines and the wordmark. Search the catalog below, or type any family name.</p>
+        </div>
+        <div class="field">
+          <label class="field-label" for="font_body">Body font</label>
+          <div class="fontpick" data-target="font_body">
+            <input type="text" id="font_body" class="input fontpick-input" maxlength="120"
+                   spellcheck="false" autocomplete="off" placeholder="Outfit"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="fp-panel-body">
+            <span class="fontpick-caret" aria-hidden="true">&#9662;</span>
+            <div class="fontpick-panel" id="fp-panel-body" role="listbox" hidden></div>
+          </div>
+          <p class="field-hint">Interface and body copy.</p>
+        </div>
+        <div class="notice" id="webfont-note"></div>
+      </section>
+
+      <section class="panel section" aria-labelledby="sec-options">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sec-options">Options</h2>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" id="show_attribution">
+          <span>Keep a small &ldquo;Powered by Captcher&rdquo; line in exported walkthroughs.</span></label>
+      </section>
+
+      <div class="actions">
+        <button type="submit" class="button button--primary" id="btn-save">Save profile</button>
+        <button type="button" class="button button--ghost" id="btn-reset">Reset to the Captcher defaults</button>
+        <span class="status inline-status inline-status--muted" id="status"></span>
+      </div>
+    </form>
+
+    <aside class="preview">
+      <span class="label pv-label">Live preview</span>
+      <div class="pv-frame" id="pv-frame">
+        <div class="pv-topbar">
+          <span class="pv-brand"><img id="pv-logo-dark" alt=""><b id="pv-word-top">Captcher</b></span>
+          <span class="pv-progress mono">STEP 02 / 06</span>
+        </div>
+        <div class="pv-card">
+          <div class="pv-cardbrand"><img id="pv-logo-light" alt=""><b id="pv-word-card">Captcher</b></div>
+          <div class="pv-eyebrow">Step 2 · Choose a reason</div>
+          <div class="pv-title">Make the decision count.</div>
+          <p class="pv-scenario">This case came from the fraud team, so choose the reason code that keeps the audit trail clear.</p>
+          <div class="pv-btns"><span class="pv-btn pv-primary">Show me</span><span class="pv-btn pv-secondary">You try</span></div>
+          <!-- No glyphs: status is a word and a hue in this system, never an icon,
+               and a wrong choice gets a reason rather than a verdict. -->
+          <div class="pv-feedback"><span class="pv-ok">Checked</span><span class="pv-bad">Try again</span></div>
+        </div>
+        <div class="pv-foot"><span id="pv-foot-main">Captcher · One run-through is the training.</span><span class="attr" id="pv-attr">Powered by Captcher</span></div>
+      </div>
+    </aside>
+  </div>
+</main>
+<link id="pv-webfont" rel="stylesheet" href="">
+<script>
+(function () {
+  var COLLECTION = {"active": "shadow-capture", "profiles": [{"brand_name": "Captcher", "tagline": "One run-through is the training.", "logo_light_url": "https://www.captcher.app/assets/logo-horizontal-light.svg", "logo_dark_url": "https://www.captcher.app/assets/logo-horizontal.svg", "favicon_url": "https://www.captcher.app/assets/favicon-32.png", "colors": {"primary": "#3B49C6", "primary_hover": "#2F3BA8", "accent": "#0A6FA8", "background": "#F2F3F7", "surface": "#FFFFFF", "text": "#14151A", "muted": "#6B6F7B", "border": "#E6E7EC", "success": "#0B7A5A", "error": "#B83227"}, "fonts": {"heading": "Outfit", "body": "DM Sans", "webfont_url": ""}, "show_attribution": true, "id": "shadow-capture", "read_only": true}]};   // { active, profiles:[ ... ] }
+  var MYBRAND = {"brand_name": "Captcher", "tagline": "One run-through is the training.", "logo_light_url": "https://www.captcher.app/assets/logo-horizontal-light.svg", "logo_dark_url": "https://www.captcher.app/assets/logo-horizontal.svg", "favicon_url": "https://www.captcher.app/assets/favicon-32.png", "colors": {"primary": "#3B49C6", "primary_hover": "#2F3BA8", "accent": "#0A6FA8", "background": "#F2F3F7", "surface": "#FFFFFF", "text": "#14151A", "muted": "#6B6F7B", "border": "#E6E7EC", "success": "#0B7A5A", "error": "#B83227"}, "fonts": {"heading": "Outfit", "body": "DM Sans", "webfont_url": ""}, "show_attribution": true, "id": "shadow-capture", "read_only": true};          // the locked "my brand" profile
+  var COLOR_KEYS = Object.keys(MYBRAND.colors);
+  var HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+  var $ = function (id) { return document.getElementById(id); };
+  // The same escape the catalog and both players use. This page had two
+  // partial ones instead — a font name escaped for "<" only and a URL escaped
+  // for "&" only — and the font name is a field the user types. Neither was
+  // reachable in its own context, but a half-escape is the kind of thing that
+  // outlives the reasoning behind it.
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  };
+  var form = $("brand-form"), statusEl = $("status"), sel = $("profile-select");
+  var currentId = COLLECTION.active || MYBRAND.id;
+  var dirty = false;
+
+  // Status lines are the system's .inline-status: success is green, failure is
+  // pink, and anything in progress is muted. "status" stays on the element as
+  // a layout hook, since className is rewritten wholesale on every update.
+  var STATUS_CLASS = {
+    ok:  "status inline-status",
+    err: "status inline-status inline-status--error"
+  };
+  function statusClass(kind) {
+    return STATUS_CLASS[kind] || "status inline-status inline-status--muted";
+  }
+
+  function findProfile(id) {
+    return COLLECTION.profiles.filter(function (p) { return p.id === id; })[0];
+  }
+  function current() { return findProfile(currentId) || MYBRAND; }
+  function isReadOnly(p) { return !!(p && p.read_only); }
+  function labelFor(p) {
+    return p.brand_name || "(unnamed brand)";
+  }
+  function setStatus(msg, kind) { statusEl.textContent = msg || ""; statusEl.className = statusClass(kind); }
+
+  function expand(hex) {
+    if (/^#[0-9a-fA-F]{3}$/.test(hex))
+      return "#" + hex.slice(1).split("").map(function (c) { return c + c; }).join("");
+    return hex;
+  }
+
+  function renderSelect() {
+    sel.innerHTML = "";
+    COLLECTION.profiles.forEach(function (p) {
+      var o = document.createElement("option");
+      o.value = p.id; o.textContent = labelFor(p);
+      sel.appendChild(o);
+    });
+    sel.value = currentId;
+  }
+
+  function setLocked(locked) {
+    form.classList.toggle("locked", locked);
+    form.querySelectorAll("input").forEach(function (el) { el.disabled = locked; });
+    $("btn-save").style.display = locked ? "none" : "";
+    $("btn-reset").style.display = locked ? "none" : "";
+    $("btn-del").style.display = locked ? "none" : "";
+    $("ro-badge").style.display = locked ? "" : "none";
+    $("brand_url").disabled = locked;
+    $("btn-fetch-brand").disabled = locked;
+  }
+
+  function populate(d) {
+    $("brand_name").value = d.brand_name || "";
+    $("tagline").value = d.tagline || "";
+    $("logo_light_url").value = d.logo_light_url || "";
+    $("logo_dark_url").value = d.logo_dark_url || "";
+    $("favicon_url").value = d.favicon_url || "";
+    $("font_heading").value = (d.fonts && d.fonts.heading) || "";
+    $("font_body").value = (d.fonts && d.fonts.body) || "";
+    $("show_attribution").checked = d.show_attribution !== false;
+    COLOR_KEYS.forEach(function (k) {
+      var v = (d.colors && d.colors[k]) || MYBRAND.colors[k];
+      var sw = document.querySelector('[data-color="' + k + '"]');
+      var hx = document.querySelector('[data-hex="' + k + '"]');
+      if (sw) sw.value = expand(v);
+      if (hx) { hx.value = v.toUpperCase(); hx.classList.remove("bad"); }
+    });
+    setLocked(isReadOnly(d));
+    render();
+  }
+
+  function showProfile(id) {
+    currentId = id;
+    renderSelect();
+    populate(current());
+    dirty = false;
+    $("importbar").style.display = "none";
+  }
+
+  function gather() {
+    var colors = {};
+    COLOR_KEYS.forEach(function (k) {
+      colors[k] = (document.querySelector('[data-hex="' + k + '"]').value || "").trim();
+    });
+    return {
+      brand_name: $("brand_name").value.trim(),
+      tagline: $("tagline").value.trim(),
+      logo_light_url: $("logo_light_url").value.trim(),
+      logo_dark_url: $("logo_dark_url").value.trim(),
+      favicon_url: $("favicon_url").value.trim(),
+      colors: colors,
+      fonts: {
+        heading: $("font_heading").value.trim(),
+        body: $("font_body").value.trim()
+      },
+      show_attribution: $("show_attribution").checked
+    };
+  }
+
+  // ---- Google Fonts catalog (fetched from /api/fonts) ----
+  var FONTS = [];            // [{family, category, variants}] popularity-sorted
+  var FONT_WEIGHTS = {};     // lowercased family -> [numeric weights available]
+  var PREVIEW_LOADED = {};   // family -> true once its preview webfont is injected
+  var INLINED_FONTS = { "dm sans": 1, "outfit": 1, "sora": 1, "jetbrains mono": 1 };  // mirrors branding._INLINED_FONTS
+
+  function weightsFromVariants(variants) {
+    var seen = {};
+    (variants || []).forEach(function (v) {
+      v = String(v).toLowerCase();
+      if (v === "regular" || v === "italic") seen[400] = 1;
+      else { var m = v.match(/^(\d{3})/); if (m) seen[+m[1]] = 1; }
+    });
+    return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+  }
+
+  // css2 fragment for one family using its real weights (prefer 400 & 700;
+  // fall back to whatever it ships, or the default face if unknown).
+  function familyCss2Part(fam) {
+    var plus = fam.replace(/ /g, "+");
+    var avail = FONT_WEIGHTS[fam.toLowerCase()];
+    if (!avail || !avail.length) return "family=" + plus;
+    var want = [400, 700, 800].filter(function (w) { return avail.indexOf(w) >= 0; });
+    if (!want.length) want = [avail[0]];
+    if (want.length === 1 && want[0] === 400) return "family=" + plus;
+    return "family=" + plus + ":wght@" + want.join(";");
+  }
+
+  function googleFontsUrl(heading, body) {
+    var fams = [];
+    [heading, body].forEach(function (f) {
+      f = (f || "").replace(/"/g, "").trim();
+      if (f && !INLINED_FONTS[f.toLowerCase()] && fams.indexOf(f) < 0) fams.push(f);
+    });
+    if (!fams.length) return "";
+    return "https://fonts.googleapis.com/css2?" +
+      fams.map(familyCss2Part).join("&") + "&display=swap";
+  }
+
+  // The built-in profile's logos are absolute URLs on the old hosted site
+  // (the profile contract wants absolute URLs; export._own_asset copies them
+  // off disk). The same files ship in /static/, so show those: this page must
+  // not contact anything to draw Captcher's own logo.
+  var OWN_ASSET = /^https:\/\/(?:www\.)?(?:captcher\.app|shadowcapture\.ai)\/assets\/([A-Za-z0-9._-]+)$/i;
+  function shown(url) {
+    var m = OWN_ASSET.exec(url || "");
+    return m ? "/static/" + m[1] : url;
+  }
+
+  function setLogo(imgId, url) {
+    var img = $(imgId);
+    url = shown(url);
+    if (url) { img.src = url; img.classList.add("on"); }
+    else { img.removeAttribute("src"); img.classList.remove("on"); }
+  }
+
+  // Mirrors export.PLATFORM_ACCENT: the pre-Brand-Guide-v1 lime accent keeps
+  // its olive deep step on the old Paper ground, so profiles duplicated from the
+  // old built-in one preview exactly as they export. Change these two only
+  // together with export.py.
+  var PLATFORM_ACCENT = "#C6FF3D", PLATFORM_ACCENT_TEXT = "#4F6B00";
+
+  function rgbOf(h) {
+    h = h.replace("#", "");
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [0, 2, 4].map(function (i) { return parseInt(h.slice(i, i + 2), 16); });
+  }
+  function lum(rgb) {
+    var c = rgb.map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0587 * c[2];
+  }
+  function contrast(a, b) {
+    var la = lum(rgbOf(a)), lb = lum(rgbOf(b));
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+  function darken(h, t) {
+    return "#" + rgbOf(h).map(function (v) {
+      return Math.round(v * (1 - t)).toString(16).padStart(2, "0");
+    }).join("").toUpperCase();
+  }
+  function lighten(h, t) {
+    return "#" + rgbOf(h).map(function (v) {
+      return Math.round(v + (255 - v) * t).toString(16).padStart(2, "0");
+    }).join("").toUpperCase();
+  }
+  // Mirror of export._readable(): step away from the ground until AA — darker
+  // on a light ground, lighter on a dark one — or give up at black / white.
+  function readableOn(c, on, target) {
+    target = target || 4.5;
+    if (contrast(c, on) >= target) return c;
+    var dark = lum(rgbOf(on)) < 0.179;
+    for (var i = 1; i <= 20; i++) {
+      var cand = dark ? lighten(c, i / 20) : darken(c, i / 20);
+      if (contrast(cand, on) >= target) return cand;
+    }
+    return dark ? "#FFFFFF" : "#000000";
+  }
+
+  // Mirror of export._logo_on(): the two fields name the ground an asset was
+  // drawn for, not its ink, so which one renders is decided by this profile's own
+  // Surface colour. 0.179 is the usual light/dark luminance split.
+  function logoOn(c, ground) {
+    var light = (c.logo_light_url || "").trim(), dark = (c.logo_dark_url || "").trim();
+    if (HEX.test(ground || "") && lum(rgbOf(ground)) < 0.179) return dark || light;
+    return light || dark;
+  }
+
+  function render() {
+    var c = gather();
+    var f = $("pv-frame");
+    var map = { primary:"--b-primary", accent:"--b-accent", background:"--b-bg",
+      surface:"--b-surface", text:"--b-text", muted:"--b-muted", border:"--b-border",
+      success:"--b-ok", error:"--b-bad" };
+    COLOR_KEYS.forEach(function (k) {
+      var v = c.colors[k];
+      if (HEX.test(v)) f.style.setProperty(map[k], v);
+    });
+    // Eyebrows are body size, so a customer's accent has to be darkened until
+    // it clears AA on the page behind it. This mirrors export._readable() and
+    // export.PLATFORM_ACCENT in export.py — the preview recomputes on every
+    // keystroke, so a round-trip to the server would be wrong. Keep them in
+    // step.
+    if (HEX.test(c.colors.accent)) {
+      f.style.setProperty("--b-accent-text",
+        c.colors.accent.toUpperCase() === PLATFORM_ACCENT &&
+          (c.colors.background || "").toUpperCase() === "#F4F4EF" ? PLATFORM_ACCENT_TEXT
+          : readableOn(c.colors.accent,
+              HEX.test(c.colors.background) ? c.colors.background : "#FFFFFF"));
+    }
+    f.style.setProperty("--b-head", '"' + (c.fonts.heading || "Outfit") + '"');
+    f.style.setProperty("--b-body", '"' + (c.fonts.body || "DM Sans") + '"');
+    var name = c.brand_name || "Your brand";
+    $("pv-word-top").textContent = name;
+    $("pv-word-card").textContent = name;
+    var chromeLogo = logoOn(c, c.colors.surface || c.colors.background);
+    setLogo("pv-logo-dark", chromeLogo);
+    setLogo("pv-logo-light", chromeLogo);
+    $("pv-word-top").style.display = chromeLogo ? "none" : "";
+    $("pv-word-card").style.display = chromeLogo ? "none" : "";
+    $("pv-foot-main").textContent = name + (c.tagline ? " · " + c.tagline : "");
+    $("pv-attr").style.display = c.show_attribution ? "" : "none";
+    var url = googleFontsUrl(c.fonts.heading, c.fonts.body);
+    var wf = $("pv-webfont");
+    if (wf.getAttribute("href") !== url) wf.setAttribute("href", url);
+    var note = $("webfont-note");
+    // once the catalog is loaded, warn about families Google doesn't serve
+    var unknown = [];
+    if (FONTS.length) {
+      [c.fonts.heading, c.fonts.body].forEach(function (f) {
+        f = (f || "").trim();
+        if (f && !INLINED_FONTS[f.toLowerCase()] &&
+            !(f.toLowerCase() in FONT_WEIGHTS) && unknown.indexOf(f) < 0) unknown.push(f);
+      });
+    }
+    if (unknown.length) {
+      note.className = "notice notice--error";
+      note.innerHTML = unknown.map(function (f) {
+        return "&ldquo;" + esc(f) + "&rdquo;";
+      }).join(" and ") + " is not in the Google Fonts catalog, so the export has nothing to load and falls back to a system face. Pick a family from the list instead.";
+    } else if (url) {
+      note.className = "notice";
+      note.innerHTML = "Loaded from Google Fonts: <code>" + esc(url) + "</code>";
+    } else {
+      note.className = "notice";
+      note.innerHTML = "Using the fonts Captcher already bundles. No external load needed.";
+    }
+    document.querySelectorAll("[data-thumb]").forEach(function (t) {
+      var url = shown($(t.getAttribute("data-thumb")).value.trim());
+      t.classList.toggle("empty", !url);
+      t.style.backgroundImage = url ? "url('" + url.replace(/'/g, "%27") + "')" : "none";
+    });
+    COLOR_KEYS.forEach(function (k) {
+      var hx = document.querySelector('[data-hex="' + k + '"]');
+      var v = (hx.value || "").trim();
+      var ok = !v || HEX.test(v);
+      hx.classList.toggle("bad", !ok);
+      if (ok && v) { var sw = document.querySelector('[data-color="' + k + '"]'); if (sw) sw.value = expand(v); }
+    });
+    // live-update the selected option's label as the brand name changes
+    if (!isReadOnly(current()) && sel.selectedOptions[0])
+      sel.selectedOptions[0].textContent = name;
+  }
+
+  function guardDirty() {
+    return !dirty || window.confirm("You have unsaved changes. Discard them?");
+  }
+
+  function post(url, body) {
+    return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+  }
+
+  // ---- import from a URL: fetch + AI-infer, fills the form for review ----
+  function setFetchStatus(msg, kind) {
+    var el = $("fetch-status");
+    el.textContent = msg || ""; el.className = statusClass(kind);
+  }
+
+  function populateFetched(d) {
+    if (d.brand_name) $("brand_name").value = d.brand_name;
+    $("tagline").value = d.tagline || "";
+    $("logo_light_url").value = d.logo_light_url || "";
+    $("logo_dark_url").value = d.logo_dark_url || "";
+    $("favicon_url").value = d.favicon_url || "";
+    if (d.fonts && d.fonts.heading) $("font_heading").value = d.fonts.heading;
+    if (d.fonts && d.fonts.body) $("font_body").value = d.fonts.body;
+    COLOR_KEYS.forEach(function (k) {
+      var v = d.colors && d.colors[k];
+      if (!v) return;
+      var sw = document.querySelector('[data-color="' + k + '"]');
+      var hx = document.querySelector('[data-hex="' + k + '"]');
+      if (sw) sw.value = expand(v);
+      if (hx) { hx.value = v.toUpperCase(); hx.classList.remove("bad"); }
+    });
+    dirty = true;
+    render();
+  }
+
+  $("brand_url").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); $("btn-fetch-brand").click(); }
+  });
+
+  $("btn-fetch-brand").addEventListener("click", function () {
+    if (isReadOnly(current())) return;
+    var url = $("brand_url").value.trim();
+    if (!url) { setFetchStatus("Enter a URL first, for example acme.com.", "err"); return; }
+    // Fetch overwrites whichever profile is currently selected once Saved.
+    // A freshly created "New brand" placeholder is safe to fill in silently;
+    // anything already named is a real profile someone could lose, so confirm.
+    var cur = current();
+    if ((cur.brand_name || "").trim() !== "New brand") {
+      var ok = window.confirm(
+        "This will replace “" + (cur.brand_name || "this profile") + "”’s colours, fonts, " +
+        "logo, and tagline with values fetched from the URL once you click Save.\n\n" +
+        "Click Cancel, then “New profile” first if you want this as a separate brand instead.");
+      if (!ok) return;
+    }
+    var btn = $("btn-fetch-brand");
+    btn.disabled = true; $("brand_url").disabled = true;
+    var prevLabel = btn.textContent; btn.textContent = "Reading…";
+    setFetchStatus("Reading the page and inferring the brand. This can take a moment.", null);
+    post("/api/branding/from-url", { url: url }).then(function (res) {
+      if (res.ok) {
+        populateFetched(res.d.brand);
+        setFetchStatus("Filled in from " + (res.d.source_url || url) + ". Review the fields, then save.", "ok");
+      } else {
+        setFetchStatus(res.d.error || "That URL could not be read. Check it is public, then try again.", "err");
+      }
+    }).catch(function () { setFetchStatus("The server did not respond. Check your connection, then try again.", "err"); })
+      .finally(function () { btn.disabled = false; $("brand_url").disabled = false; btn.textContent = prevLabel; });
+  });
+
+  // ---- events ----
+  form.addEventListener("input", function (e) {
+    if (isReadOnly(current())) return;
+    var t = e.target;
+    if (t.dataset && t.dataset.color) {
+      var hx = document.querySelector('[data-hex="' + t.dataset.color + '"]');
+      if (hx) hx.value = t.value.toUpperCase();
+    }
+    dirty = true; setStatus("");
+    render();
+  });
+
+  sel.addEventListener("change", function () {
+    var id = sel.value;
+    if (id === currentId) return;
+    if (!guardDirty()) { sel.value = currentId; return; }
+    showProfile(id);
+    post("/api/branding/select", { id: id });
+    setStatus("");
+  });
+
+  // MYBRAND is the template a new or reset profile starts from, but only for its
+  // colours, fonts and wording. Its logo and favicon URLs are Captcher's own
+  // lockup (branding.SHADOW_CAPTURE_ASSETS), and a white-label profile that quietly
+  // inherited them would put our mark on someone else's export. Clone, then clear.
+  function fromMyBrand() {
+    var o = JSON.parse(JSON.stringify(MYBRAND));
+    o.logo_light_url = ""; o.logo_dark_url = ""; o.favicon_url = "";
+    o.read_only = false;
+    return o;
+  }
+
+  $("btn-reset").addEventListener("click", function () {
+    if (isReadOnly(current())) return;
+    var keepName = $("brand_name").value;   // reset brand values but keep the profile's name
+    var base = fromMyBrand();
+    base.brand_name = keepName;
+    populate(base);
+    dirty = true;
+    setStatus("Reset to the Captcher defaults. Save to keep them.", null);
+  });
+
+  $("btn-new").addEventListener("click", function () {
+    if (!guardDirty()) return;
+    var fresh = fromMyBrand();
+    fresh.brand_name = "New brand"; fresh.id = "";
+    setStatus("Creating…");
+    post("/api/branding/save", fresh).then(function (res) {
+      if (res.ok) { COLLECTION = res.d.collection; showProfile(res.d.id);
+        $("importbar").style.display = "";
+        setStatus("New profile created.", "ok"); $("brand_name").focus(); $("brand_name").select(); }
+      else setStatus(res.d.error || "The profile was not created. Try again.", "err");
+    });
+  });
+
+  $("btn-dup").addEventListener("click", function () {
+    if (!guardDirty()) return;
+    var copy = gather();
+    copy.brand_name = (copy.brand_name || "Brand") + " copy";
+    copy.id = "";
+    setStatus("Duplicating…");
+    post("/api/branding/save", copy).then(function (res) {
+      if (res.ok) { COLLECTION = res.d.collection; showProfile(res.d.id);
+        setStatus("Profile duplicated.", "ok"); $("brand_name").focus(); $("brand_name").select(); }
+      else setStatus(res.d.errors ? res.d.errors.join(" · ") : (res.d.error || "The copy was not created. Try again."), "err");
+    });
+  });
+
+  $("btn-del").addEventListener("click", function () {
+    var p = current();
+    if (isReadOnly(p)) return;
+    if (!window.confirm('Delete the "' + (p.brand_name || "this") + '" brand profile? This cannot be undone.')) return;
+    setStatus("Deleting…");
+    post("/api/branding/delete", { id: currentId }).then(function (res) {
+      if (res.ok) { COLLECTION = res.d.collection; dirty = false; showProfile(COLLECTION.active);
+        setStatus("Profile deleted.", "ok"); }
+      else setStatus(res.d.error || "The profile was not deleted. Try again.", "err");
+    });
+  });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (isReadOnly(current())) return;
+    var payload = gather();
+    var bad = COLOR_KEYS.some(function (k) { var v = payload.colors[k]; return v && !HEX.test(v); });
+    if (bad) { setStatus("A hex value is not readable. Use three or six hex digits, such as #3B49C6.", "err"); render(); return; }
+    payload.id = currentId;
+    var btn = $("btn-save"); btn.disabled = true;
+    setStatus("Saving…");
+    post("/api/branding/save", payload).then(function (res) {
+      if (res.ok) { COLLECTION = res.d.collection; dirty = false; currentId = res.d.id;
+        renderSelect(); setStatus("Profile saved.", "ok"); }
+      else setStatus(res.d.errors ? res.d.errors.join(" · ") : (res.d.error || "The profile was not saved. Check the fields above, then try again."), "err");
+    }).catch(function () { setStatus("The server did not respond. Check your connection, then try again.", "err"); })
+      .finally(function () { btn.disabled = false; });
+  });
+
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  // ---- font picker: searchable dropdown with live per-font previews -------
+  function fpEsc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  // Inject a css2 <link> for a family's default face so options render in
+  // their own typeface. Done lazily (per visible row) so we never load 1,800
+  // webfonts at once.
+  function loadPreviewFont(family) {
+    if (!family || PREVIEW_LOADED[family] || INLINED_FONTS[family.toLowerCase()]) return;
+    PREVIEW_LOADED[family] = true;
+    var l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=" +
+             family.replace(/ /g, "+") + "&display=swap";
+    document.head.appendChild(l);
+  }
+
+  var FP_CAP = 300;   // rows rendered at once; catalog is popularity-sorted
+
+  function initFontPicker(inputId) {
+    var input = $(inputId);
+    var wrap = input.parentNode;                    // .fontpick
+    var panel = wrap.querySelector(".fontpick-panel");
+    var open = false, activeIdx = -1, opts = [], searching = false;
+
+    var io = ("IntersectionObserver" in window) ? new IntersectionObserver(function (ents) {
+      ents.forEach(function (en) {
+        if (en.isIntersecting) {
+          loadPreviewFont(en.target.getAttribute("data-family"));
+          io.unobserve(en.target);
+        }
+      });
+    }, { root: panel, rootMargin: "160px" }) : null;
+
+    function build() {
+      // `searching` true only while the user is typing — an open-on-focus shows
+      // the whole catalog (filtering by the already-selected family would hide
+      // every other font). `cur` still highlights/scrolls to the current pick.
+      var cur = input.value.trim().toLowerCase();
+      var q = searching ? cur : "";
+      panel.innerHTML = ""; opts = []; activeIdx = -1;
+      var shown = 0, total = 0, selEl = null;
+      for (var i = 0; i < FONTS.length; i++) {
+        var fam = FONTS[i].family;
+        if (q && fam.toLowerCase().indexOf(q) < 0) continue;
+        total++;
+        if (shown >= FP_CAP) continue;
+        var o = document.createElement("div");
+        o.className = "fp-opt";
+        o.setAttribute("role", "option");
+        o.setAttribute("data-family", fam);
+        o.style.fontFamily = "'" + fam.replace(/'/g, "") + "', sans-serif";
+        o.innerHTML = '<span class="fp-name">' + fpEsc(fam) + '</span>' +
+          (FONTS[i].category ? '<span class="fp-cat label label--sm">' + fpEsc(FONTS[i].category) + '</span>' : '');
+        if (fam.toLowerCase() === cur) { o.classList.add("sel"); selEl = o; }
+        panel.appendChild(o);
+        opts.push(o);
+        if (io) io.observe(o); else loadPreviewFont(fam);
+        shown++;
+      }
+      if (!shown) {
+        var e = document.createElement("div");
+        e.className = "fp-empty field-hint";
+        e.textContent = input.value.trim()
+          ? 'No catalog match. Press Enter to use "' + input.value.trim() + '" anyway.'
+          : "The font catalog did not load. Type a family name instead.";
+        panel.appendChild(e);
+      } else if (total > shown) {
+        var m = document.createElement("div");
+        m.className = "fp-more field-hint";
+        m.textContent = "Showing top " + shown + " of " + total + " matches — keep typing to narrow.";
+        panel.appendChild(m);
+      }
+      // reveal the current selection when opening the full list
+      if (selEl && !searching) panel.scrollTop = Math.max(0, selEl.offsetTop - panel.clientHeight / 2);
+    }
+
+    function openPanel() { if (!open) { build(); panel.hidden = false; open = true; input.setAttribute("aria-expanded", "true"); } }
+    function closePanel() { if (open) { panel.hidden = true; open = false; activeIdx = -1; input.setAttribute("aria-expanded", "false"); } }
+    function setActive(i) {
+      if (activeIdx >= 0 && opts[activeIdx]) opts[activeIdx].classList.remove("active");
+      activeIdx = i;
+      if (i >= 0 && opts[i]) { opts[i].classList.add("active"); opts[i].scrollIntoView({ block: "nearest" }); }
+    }
+    function choose(fam) {
+      input.value = fam;
+      searching = false;
+      closePanel();
+      dirty = true; setStatus(""); render();   // update value + live preview without reopening
+    }
+
+    input.addEventListener("focus", function () { searching = false; openPanel(); input.select(); });
+    input.addEventListener("click", function () { if (!open) { searching = false; openPanel(); } });
+    input.addEventListener("input", function () { searching = true; if (open) build(); else openPanel(); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); if (!open) openPanel(); setActive(Math.min(activeIdx + 1, opts.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(activeIdx - 1, 0)); }
+      else if (e.key === "Enter") {
+        if (open && activeIdx >= 0 && opts[activeIdx]) { e.preventDefault(); choose(opts[activeIdx].getAttribute("data-family")); }
+        else closePanel();
+      } else if (e.key === "Escape") { closePanel(); }
+    });
+    // mousedown (not click) so it beats the input's blur that closes the panel
+    panel.addEventListener("mousedown", function (e) {
+      var o = e.target.closest(".fp-opt");
+      if (o) { e.preventDefault(); choose(o.getAttribute("data-family")); }
+    });
+    input.addEventListener("blur", function () { setTimeout(closePanel, 120); });
+  }
+
+  function loadFontCatalog() {
+    fetch("/api/fonts").then(function (r) { return r.json(); }).then(function (d) {
+      FONTS = (d && d.fonts) || [];
+      FONT_WEIGHTS = {};
+      FONTS.forEach(function (it) { FONT_WEIGHTS[it.family.toLowerCase()] = weightsFromVariants(it.variants); });
+      var note = $("fonts-source-note");
+      if (note) note.textContent = (d && d.source === "google")
+        ? FONTS.length.toLocaleString() + " Google Fonts" : "Google Fonts (curated list)";
+      loadPreviewFont($("font_heading").value.trim());
+      loadPreviewFont($("font_body").value.trim());
+      render();   // re-run now that real per-font weights are known
+    }).catch(function () {
+      var note = $("fonts-source-note"); if (note) note.textContent = "Google Fonts";
+    });
+  }
+
+  initFontPicker("font_heading");
+  initFontPicker("font_body");
+  loadFontCatalog();
+
+  showProfile(currentId);
+})();
+</script>
+
+<script>
+  (function () {
+    var h = document.querySelector(".site-header");
+    if (!h) return;
+    var onScroll = function () { h.classList.toggle("scrolled", window.scrollY > 10); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  })();
+</script>
+
+</body></html>

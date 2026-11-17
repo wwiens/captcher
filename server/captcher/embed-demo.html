@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- embed-demo.html — stands in for a CUSTOMER's own application page.
+     It demonstrates the "Embed on your site" feature end-to-end:
+
+       1. python3 server.py            (default port 8080)
+       2. Open a walkthrough and click the embed (</>) toolbar button —
+          a separate dialog from the plain file download, with its own
+          options (Structure, Dim the page behind it, Max width) — then
+          click "Enable embedding".
+          (add-points is already published if you ran the test pass.)
+       3. Open this file in a browser (double-click works — the snippet
+          points at http://localhost:8080).
+
+     A floating Help button appears bottom-right; clicking it (or the
+     "open the walkthrough" link, which uses data-captcher-help) pops
+     the modal with the player inside, auto-sized to the captured region.
+     Both that attribute and the data-sc-* script attributes below are the
+     current names; earlier data-* spellings
+     spellings are gone: a page still on an old snippet has to re-copy it
+     from "Get embed code".
+
+     This page is deliberately NOT styled like Captcher — blue header,
+     rounded box, system font. It stands in for somebody else's product, and
+     the whole point of the widget is that it is the only Captcher
+     thing on the page.
+
+     The embed dialog's Structure/Dim/Max-width choices are frozen into the
+     publication itself (server-side, in embed.json) — they don't need to be
+     repeated as attributes here. data-sc-backdrop and data-sc-max-width
+     below are shown for reference: the "Get embed code" button fills them
+     in automatically whenever "Dim the page behind it" is off or a Max
+     width is set. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acme Rewards Admin — embed demo</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; color: #222; }
+  header { background: #26405C; color: #fff; padding: 16px 32px; font-size: 18px; font-weight: 700; }
+  main { max-width: 720px; margin: 48px auto; padding: 0 24px; line-height: 1.7; }
+  h1 { font-size: 26px; }
+  .hint { background: #F4F6F9; border: 1px solid #D9E0E8; border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  a { color: #26405C; }
+</style>
+</head>
+<body>
+<header>Acme Rewards Admin (pretend customer application)</header>
+<main>
+  <h1>Member management</h1>
+  <p>This page pretends to be a customer's own web application. The only
+     captcher-related thing on it is the snippet at the bottom of the
+     file — exactly what the "Get embed code" button produces.</p>
+  <div class="hint">
+    Stuck? Click the Help button in the corner, or
+    <a href="#" data-captcher-help>open the walkthrough</a> right here
+    (any element with a <code>data-captcher-help</code> attribute works
+    as a custom trigger).
+  </div>
+  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec
+     odio. Praesent libero. Sed cursus ante dapibus diam. Sed nisi. Nulla
+     quis sem at nibh elementum imperdiet.</p>
+</main>
+
+<!-- ==== Captcher embed snippet (from "Get embed code") ====
+     data-sc-max-width demoed here (caps the modal at 640px, scaling the
+     recorded region down to fit); data-sc-backdrop="0" would leave this
+     page undimmed behind the modal instead of the default dark scrim. -->
+<script src="http://localhost:8080/static/embed.js" defer
+        data-sc-src="http://localhost:8080/embed/add-points"
+        data-sc-title="How to add points"
+        data-sc-max-width="640"></script>
+</body>
+</html>

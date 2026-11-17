@@ -1,0 +1,2598 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Walkthroughs — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+<!-- Appearance, resolved before the first paint.
+
+     This must be an INLINE, synchronous script in <head>. An external file, a
+     defer, or anything that runs after the body parses means the page paints
+     in the wrong theme first and flips — the exact flash a theme toggle exists
+     to avoid. It is small and it does not touch the network, so it costs one
+     parse.
+
+     Three states, not two. Light is the default (Brand Guide v1 is light-first):
+     a browser with nothing stored gets "light". "system" is an explicit choice
+     and is not a value that ever reaches the DOM: the OS answer is resolved
+     here — dark only when the OS asks for dark — and an explicit
+     data-sc-theme="light"|"dark" is stamped on <html>, so the stylesheet only
+     needs its one [data-sc-theme="dark"] block and no prefers-color-scheme
+     media query has to be kept in step with it.
+
+     The choice lives in localStorage, per browser, alongside the catalog's
+     sc-collections-collapsed. The key is unchanged from earlier releases, so a
+     stored "system" or "dark" is honoured. Nothing is sent to the server and
+     nothing is read from the member row, so this file is the whole of the
+     mechanism and a signed-out page could adopt it unchanged.
+
+     Storage can throw outright — Safari in private browsing, and any browser
+     set to block site data — so every access is wrapped. A failed read is
+     "light", which is the same answer a first visit gets. -->
+<script>
+(function () {
+  var KEY = "sc-theme";
+  var root = document.documentElement;
+  var media = window.matchMedia("(prefers-color-scheme: dark)");
+  var choice;
+  try { choice = localStorage.getItem(KEY); } catch (e) { choice = null; }
+  if (choice !== "system" && choice !== "dark") choice = "light";
+
+  function paint() {
+    var resolved = choice === "system" ? (media.matches ? "dark" : "light") : choice;
+    root.setAttribute("data-sc-theme", resolved);
+    // The browser paints its own chrome (the address bar on mobile, the space
+    // beyond an overscroll) from this, so a stale one leaves a dark band above
+    // a light page.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#F2F3F7" : "#0F1117");
+    root.dispatchEvent(new CustomEvent("sc:theme", { detail: { choice: choice, resolved: resolved } }));
+  }
+  paint();
+
+  // Follow the OS live, but only while the choice is System — someone who
+  // picked Dark explicitly does not want their laptop's sunrise schedule
+  // overruling them. addListener is the pre-2021 Safari spelling.
+  var onSystemChange = function () { if (choice === "system") paint(); };
+  if (media.addEventListener) media.addEventListener("change", onSystemChange);
+  else if (media.addListener) media.addListener(onSystemChange);
+
+  // The only writer is the Appearance control on /account. Exposed on window
+  // rather than imported because every page carries this script and only one
+  // page has a control; there is no module system here to hang it off.
+  window.scTheme = {
+    get: function () { return choice; },
+    set: function (next) {
+      choice = (next === "system" || next === "dark") ? next : "light";
+      try { localStorage.setItem(KEY, choice); } catch (e) {}
+      paint();
+      return choice;
+    }
+  };
+})();
+</script>
+
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<!-- font-preload: start the two faces every page paints in downloading
+     alongside fonts.css rather than after the browser has parsed it. Without
+     these the chain is HTML -> fonts.css -> woff2, three serial round trips
+     before a real glyph appears, and the page shows system sans until the
+     last one lands. DM Sans is the body; Outfit (one variable file) sets every heading above it.
+     export.py strips this block: the offline builds inline or relocate their
+     fonts, so these hrefs would be dead there. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  /* Page-local CSS is layout only. Every colour, border weight, radius and
+     type size on this page comes from static/captcher.css — including the
+     .page frame, so there is nothing to restate here.
+
+     One content column, full width. This used to be a 1.35fr/1fr split with
+     the authoring queue alone in the right lane, which meant ~40% of a desktop
+     viewport was blank whenever the queue was empty — the steady state — while
+     the library was squeezed into the remaining 55%. The queue is transient
+     and urgent, so it is a strip across the top when it has anything in it and
+     costs nothing when it does not; the library gets the whole width and lays
+     its cards out in a grid (see .cards in _catalog-script.html).
+
+     The head is one row: title and counts left, the primary action right. It
+     wraps to two rows below 640px. */
+  .cat-head { display:flex; align-items:flex-end; justify-content:space-between;
+          gap:var(--s4); flex-wrap:wrap; margin-bottom:var(--s6); }
+  .cat-head .page-head { margin-bottom:0; gap:var(--s1); }
+  .cat-head .cat-actions { display:flex; gap:var(--s2); flex:none; }
+</style></head><body>
+<header class="site-header app-sidebar" id="top">
+  <div class="nav-wrap">
+    <a class="brand-lockup" href="/" aria-label="Captcher home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 526 526" fill="none" aria-hidden="true" class="brand-svg" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTowNTFmMGY1YS03N2FlLTQ0YzUtYjc4OC02NjNlMDg4ZjJiYzgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaBtVtipGlWp5nkJeoDcMkPYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyNzIyNWFhOC0xNThkLTQxNWUtYjY5Ny01MWZiZDljNjZjNGFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo7ngJcOiuhiHL9la+jaJ1fwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggG3czPT5AiP7z/ZvL4WIYhLL1Jacc9HCfLWG/wKA51aOkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaKNZQnzAKKVSE9WaR7PCUxkAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCCdBgmDtiH2w62FT8QpfO9fI40+0uIX5AtKqMTm0RrCA2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBjLZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjA1MWYwZjVhLTc3YWUtNDRjNS1iNzg4LTY2M2UwODhmMmJjOC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmJiOWVkMTAwLThhNTgtNDg4OS1iZGFlLTJkODYxYTQ3YzYwY3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAbdzM9PkCI/vP9m8vhYhiEsvUlpxz0cJ8tYb/AoDnVo6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggTcuhKrTf5FatlZvCygCuGf36PEOCDnZpPu0XRtuR9v6iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIPb3KywRlkOpXUuKc8sfaBYoX8RVmVodGy0tFE4ySBN0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQCvByNMV60jXCO+oiBC+FzL+S12xWLwDhVS452/dLe6ZGeJzH94HZ9LsnMtHFV+tmHowdwx7vgwNNZdr9YvKWys=</c2pa:manifest></metadata><rect x="230" y="0" width="296" height="50" fill="currentColor"/><rect x="476" y="0" width="50" height="270" fill="currentColor"/><rect x="0" y="256" width="50" height="270" fill="currentColor"/><rect x="0" y="476" width="296" height="50" fill="currentColor"/><rect x="0" y="0" width="72" height="72" fill="#FF6A5C"/><rect x="92" y="92" width="90" height="90" fill="#29B6FF"/><rect x="202" y="202" width="122" height="122" fill="#3B49C6"/><rect x="344" y="344" width="90" height="90" fill="#3ECFA2"/><rect x="454" y="454" width="72" height="72" fill="#FF6A5C"/></svg>
+<span class="brand-word">Captcher</span></a>
+    <nav class="nav-right" aria-label="Main navigation">
+      <a class="nav-link active" href="/" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M10 8.8v6.4l5.2-3.2z"/></svg>Walkthroughs</a>
+      <a class="nav-link" href="/branding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21a9 9 0 1 1 9-9c0 2.2-1.8 3.5-4 3.5h-1.8a1.7 1.7 0 0 0-1.3 2.8 1.7 1.7 0 0 1-1.3 2.7z"/><circle cx="7.5" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r=".9" fill="currentColor" stroke="none"/></svg>Brand profile</a>
+      <a class="nav-link" href="/getting-started"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-5A1.5 1.5 0 0 1 3 16z"/><path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>Getting started</a>
+      <a class="nav-link" href="/extension"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4.5a2.5 2.5 0 0 1 5 0V6h3a1 1 0 0 1 1 1v3h1.5a2.5 2.5 0 0 1 0 5H18v3a1 1 0 0 1-1 1h-3v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3z"/></svg>Chrome extension</a>
+      <a class="nav-link" href="/account"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.75"/><path d="M4.75 20a7.25 7.25 0 0 1 14.5 0"/></svg>Settings</a>
+      <a class="nav-link" href="/usage"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>AI spend</a>
+    </nav>
+  </div>
+</header>
+<!-- Pairing lives on the shared chrome rather than on /account, so the
+     extension can start pairing from whichever Captcher page is open instead
+     of first telling them to navigate somewhere. It adds no UI and does
+     nothing until asked. The unlock page has no sidebar, so a locked server
+     cannot answer — which is correct, since it has no owner to mint for. -->
+<script src="/static/pair.js"></script>
+
+<main class="page">
+<div class="cat-head">
+  <div class="page-head">
+    <h1>Walkthroughs</h1>
+    <!-- The counts replace the tagline that used to sit here. This is the
+         working surface, not a landing page: what a returning author needs at
+         the top is the shape of their library, not the brand line. -->
+    <p class="page-sub small" id="cat-counts"></p>
+  </div>
+  <div class="cat-actions">
+    <!-- No record button: recording starts only from the extension's side
+         panel, which is the one surface that can see and drive the tab. -->
+    <button class="button button--secondary" type="button" id="lib-new">New collection</button>
+  </div>
+</div>
+<!-- A pass in flight. Rendered only while one is running, and above the
+     queue rather than inside it: what this used to be was one line of status
+     text welded under one queued card, which is legible if you are already
+     looking at that card and invisible from anywhere else on the page — for a
+     job that runs for minutes. renderAuthoringBanner() in _catalog-script.html
+     owns it. -->
+<section id="authoring-now"></section>
+<!-- The authoring queue: a full-width strip above the shelf, rendered only
+     when something is waiting. Filtering never touches it — see the note in
+     _catalog-script.html. -->
+<section id="queue"></section>
+<!-- The filter bar sits OUTSIDE #cards on purpose: renderCatalog() wipes
+     that element on every 10s poll, so a control built inside it would
+     lose focus and whatever was half-typed. Its layout lives in
+     _catalog-script.html with the rest of the library; the controls
+     themselves are the system's .input, .select and .chip. -->
+<div class="lib-bar" id="lib-bar" hidden>
+  <div class="lib-controls">
+    <input class="input" type="search" id="lib-q" autocomplete="off" spellcheck="false"
+           placeholder="Search walkthroughs" aria-label="Search walkthroughs">
+    <select class="select" id="lib-sort" aria-label="Sort walkthroughs"
+            title="Collections keep the order you filed them in. This sorts everything else.">
+      <option value="authored">Newest</option>
+      <option value="title">Title A&ndash;Z</option>
+      <option value="steps">Most steps</option>
+      <option value="minutes">Longest first</option>
+    </select>
+  </div>
+  <!-- Tracks are few and stable, so they are chips rather than a select: the
+       whole set is visible without opening anything, and the active one reads
+       as a selected state. Rebuilt only when the distinct set changes. -->
+  <div class="lib-tracks" id="lib-tracks" hidden role="group" aria-label="Filter by track"></div>
+  <div class="lib-status" id="lib-status" hidden>
+    <span class="label" id="lib-count"></span>
+    <button class="button button--ghost button--sm" type="button" id="lib-clear">Clear</button>
+  </div>
+</div>
+<div id="cards"><p class="empty">Loading…</p></div>
+<style>
+  /* A setup prompt at the foot of the catalog, in the flow.
+
+     It used to be position:fixed in the bottom-right corner at 340px and
+     z-index 90, which parked it on top of the content column for as long as
+     setup was undone — and because dismissal is deliberately not persisted
+     (see the note below), it came back over the same content on every reload.
+     A prompt that occludes the thing it is prompting you to fill is worse than
+     one you have to scroll to. In the flow it interrupts nothing.
+
+     The catalog has already spent its one accent on the library — the
+     recording dot and the progress fill — so this panel is deliberately quiet:
+     --surface, one hairline, radius 0, a mono caps label and a secondary
+     button. No hue and no shadow: depth is a surface step plus a border, and
+     this panel is not more important than the shelf above it.
+
+     Page-local CSS is layout only. .panel, .label, .panel-title, .notice,
+     .button and .modal-close all come from static/captcher.css. */
+  .ext-panel { position:relative; max-width:560px; margin:var(--s7) 0 0;
+               display:flex; flex-direction:column; gap:var(--s3); }
+  .ext-panel[hidden] { display:none; }
+  .ext-panel .modal-close { position:absolute; top:var(--s4); right:var(--s4); }
+  .ext-panel .panel-title { padding-right:var(--s6); }
+  .ext-panel .ext-body { font-size:var(--type-small); line-height:1.55; color:var(--text-soft); }
+  .ext-panel .button { align-self:flex-start; }
+  .ext-panel .ext-actions { display:flex; gap:var(--s3); flex-wrap:wrap; }
+</style>
+<aside class="panel ext-panel" id="ext-toast" hidden aria-label="Browser extension">
+  <button type="button" class="modal-close" id="ext-close" aria-label="Dismiss">&#10005;</button>
+  <p class="label">Browser extension</p>
+  <h2 class="panel-title">Record walkthroughs as you work</h2>
+  <p class="ext-body">The recorder sits beside your product and keeps each screen while you
+    perform the task. Install it, open its side panel, and press
+    <strong>Connect this browser</strong> — Captcher hands it a key from there, so there
+    is nothing to copy and nothing to configure.</p>
+  <div class="notice">It comes with Captcher, as a folder you load into Chrome. The setup
+    guide shows where it is and walks through it.</div>
+  <div class="ext-actions">
+    <a class="button button--secondary button--sm" href="/extension">Set up the Chrome extension</a>
+  </div>
+</aside>
+<script>
+(function () {
+  /* The prompt is a setup prompt, so it lives exactly as long as setup is
+     undone. What ends it is the extension announcing itself, not the viewer
+     clicking the close button: dismissal is deliberately not persisted, so a
+     refresh brings the prompt back while the extension is still missing.
+
+     The extension's announce.js sets this attribute at document_start, which
+     is before this script runs. A web page cannot ask Chrome what is
+     installed, so this handshake is the only signal available — an extension
+     older than it simply doesn't announce, and the prompt keeps showing.
+
+     The marker (data-captcher-capture) and the event name
+     (captcher:capture-present) are a WIRE CONTRACT with announce.js in
+     the extension repo. Both
+     ends have to move in the same release: an extension still announcing the
+     old names is invisible to this check, and the prompt keeps showing for
+     everyone who has not updated. That is the deliberate cost of dropping the
+     aliases — it is loud and self-correcting, where a silent half-rename
+     would not be.
+
+     Hidden in the markup and revealed here so it never flashes for someone who
+     already has the extension. */
+  var panel = document.getElementById("ext-toast");
+  if (document.documentElement.dataset.captcherCapture) return;
+  panel.hidden = false;
+  document.getElementById("ext-close").addEventListener("click", function () {
+    panel.hidden = true;
+  });
+  /* The announcer can also arrive after load, on a tab that was already open
+     when the extension was first pointed at this server. */
+  document.addEventListener("captcher:capture-present", function () {
+    panel.hidden = true;
+  });
+
+  /* There is deliberately no Connect button here. Connecting is done from the
+     extension's side panel, which is the only surface that can see which tab is
+     open and act on it; a second button on this page would be a second place to
+     try, and the one that cannot work from a clean install. This prompt asks
+     people to install, and says where to go next. */
+})();
+</script>
+
+</main>
+
+<style>
+  /* The catalog's page-local CSS. Layout only: every colour, border weight,
+     radius and type size comes from static/captcher.css, which this page
+     links. If you are about to write a hex value in here, it already exists
+     there under a name.
+
+     Watch the class names. captcher.css owns .button, .input, .select,
+     .panel, .pill, .dot, .chip, .label, .notice, .empty and .modal*, and this
+     file used to define .chip, .dot and .empty to mean something else. They
+     now mean what the system says they mean: a status pill is .pill, the 8px
+     status dot is .dot, and an emptiness is .empty. */
+
+  /* ---- section heads ----
+     A head has to read as the lid on the block beneath it: one compact
+     cluster, left-aligned, with a mono count beside it. There is one face
+     here: Outfit sets the h1 above and these heads alike, and the weight and
+     tracking do the work a display face used to. */
+  .sec { display:flex; align-items:center; gap:var(--s3); margin:0 0 var(--s3); }
+  .sec h2 { margin:0; min-width:0; }
+  /* the queue is a strip above the library, not a rival shelf, so its head
+     stays a size down from the collection heads below it */
+  .sec.queue-head h2 { font-size:var(--type-h3); }
+  .sec .count { white-space:nowrap; }
+  /* a collapsed section is a head and nothing else — don't leave its space
+     hanging under it on top of the next group's own */
+  .sec:last-child { margin-bottom:0; }
+
+  /* ---- library filter bar ----
+     The markup is in catalog.html, above #cards — see the note there. Every
+     control in it is a system control (.input, .select, .button); this only
+     sizes them within the row. */
+  .lib-bar { margin:0 0 var(--s6); }
+  .lib-bar[hidden] { display:none; }
+  .lib-controls { display:flex; gap:var(--s2); flex-wrap:wrap; }
+  /* the search field owns the row and the sort sits at its end; the field is
+     capped so it does not stretch to 1300px on a wide screen, where a
+     full-bleed search box reads as a page-width text input */
+  .lib-controls .input { flex:1 1 260px; min-width:0; max-width:420px; }
+  /* .select is a full-width form control by default; in a toolbar row it is
+     as wide as its longest option and no wider */
+  .lib-controls .select { flex:0 0 auto; width:auto; }
+  /* Track chips. The system's .chip already carries the selected state, so
+     this is only the row. */
+  .lib-tracks { display:flex; gap:var(--s2); flex-wrap:wrap; margin-top:var(--s3); }
+  .lib-tracks[hidden] { display:none; }
+  .lib-status { display:flex; align-items:center; gap:var(--s3); margin-top:var(--s3); }
+  /* .lib-status sets display, which would beat the hidden attribute */
+  .lib-status[hidden] { display:none; }
+  /* and so does .button's display:inline-flex — #assign-new and #lib-clear are
+     both toggled with the hidden attribute */
+  .button[hidden] { display:none; }
+
+  /* ---- collections ----
+     Section chrome only. The cards inside a collection are the same cards as
+     everywhere else — a collection groups walkthroughs, it does not restyle
+     them.
+
+     Each section is one .sec-group, and the boundary between two of them is
+     the whole point of the feature. Space says "these belong together"; the
+     rule says where one set ends. More space above the rule than below it, so
+     the rule reads as the top edge of the section starting, not as a tail on
+     the section ending. */
+  .sec-group + .sec-group { margin-top:var(--s7); padding-top:var(--s6);
+          border-top:var(--line) solid var(--border); }
+  /* The name IS the disclosure control, not a chevron parked beside it: a
+     heading wrapping a button is the standard pattern, it gives the toggle a
+     hit target worth aiming at, and the caret stops reading as a stray dash.
+     The negative margin hangs the caret in the gutter (5 padding + 7 caret + 9
+     gap = 21) so the section NAME starts flush with the card stack below it
+     and with the description. */
+  .sec-toggle { display:flex; align-items:center; gap:9px; margin-left:-21px;
+          padding:2px 5px; background:none; border:0; cursor:pointer;
+          font:inherit; letter-spacing:inherit; color:inherit; text-align:left;
+          border-radius:var(--radius-control); }
+  .sec-toggle:hover { color:var(--primary); background:var(--surface-2); }
+  /* The system allows the caret glyph, but ▾ set at label size is a weedy
+     dash, and an inline <svg> would mean innerHTML back inside sectionHead(),
+     which is exactly what a user-named collection made unsafe. So it is drawn
+     from two borders. The box is square in both states, so the name does not
+     shift on collapse — only the optical nudge differs. */
+  .chev { width:7px; height:7px; flex:none; margin-top:-4px; opacity:.5;
+          border-right:2px solid currentColor; border-bottom:2px solid currentColor;
+          transform:rotate(45deg);
+          transition:transform var(--dur-cross) var(--ease-settle); }
+  .sec-toggle[aria-expanded="false"] .chev { margin-top:0; transform:rotate(-45deg); }
+  .sec-toggle:hover .chev { opacity:1; }
+  /* A card menu has a card behind it: the ⋮ sits in a corner of a bordered
+     tile and reads as that tile's control. A section head has no such ground,
+     so the same borderless glyph at half opacity, parked beside a mono count,
+     read as punctuation — and it is the ONLY route to Rename and Delete
+     collection, so those were effectively unreachable. It takes the treatment
+     .card-menu--on-thumb already uses for the same reason: its own surface, a
+     hairline and full opacity. Still the 26px box every other card menu uses,
+     so the head does not grow around it. */
+  .sec-menu { position:relative; align-self:center; flex:none; }
+  .sec-menu .card-menu-btn { opacity:1; background:var(--surface);
+          border:var(--line) solid var(--border); color:var(--text); }
+  .sec-menu .card-menu-btn:hover, .sec-menu .card-menu-btn.open {
+          background:var(--surface-2); border-color:var(--primary);
+          color:var(--primary); }
+  /* Card menus sit at a card's right edge, so their dropdown hangs leftward
+     from it. This one sits a few hundred pixels in from the LEFT edge of the
+     page, where right:0 swings a 172px panel back toward the gutter — a
+     one-word collection name pushed it off the page entirely. Anchored under
+     the button instead. */
+  .sec-menu .card-menu-dropdown { left:0; right:auto; }
+  /* the description belongs to the head cluster, so it stays tight to it and
+     well clear of the space above the head */
+  .sec-desc { font-size:var(--type-small); color:var(--muted); line-height:1.5;
+          margin:-5px 0 var(--s3); max-width:62ch; }
+  /* collapsed, the description is the last thing in the group */
+  .sec-group > .sec-desc:last-child { margin-bottom:0; }
+  .sec-empty { font-size:var(--type-small); color:var(--muted); margin:0; }
+
+  /* ---- assign-to-collection dialog ---- */
+  .assign-list { max-height:240px; overflow:auto; border-radius:var(--radius-control);
+          border:var(--line) solid var(--border); }
+  .assign-row { display:flex; align-items:center; gap:11px; padding:10px 12px;
+          border-bottom:var(--line) solid var(--border-soft); cursor:pointer; }
+  .assign-row:last-child { border-bottom:0; }
+  .assign-row:hover { background:var(--surface-2); }
+  .assign-row input[type=checkbox] { width:17px; height:17px; flex:none;
+          accent-color:var(--primary); cursor:pointer; }
+  .assign-row .an { font-size:var(--type-small); }
+  .assign-row .ac { margin-left:auto; }
+  .assign-none { font-size:var(--type-small); color:var(--muted); padding:14px 12px; }
+
+  /* ---- the shelf ----
+     A grid, not a stack. auto-fill with a 300px floor gives four columns on a
+     1320px page, three at 1100, two at ~700 and one on a phone, with no
+     breakpoints to keep in sync. minmax(0, 1fr) rather than 1fr because a
+     grid child's default min-width is auto, and one long unbroken title would
+     otherwise push its column past the container.
+
+     The grid item is .card-slot, not .card: a card can have a status strip
+     and an authoring panel welded under it, and those three have to travel as
+     one cell. Before the grid they were siblings in a stack, which is why
+     setCardStatus still inserts the strip as the card's next sibling — inside
+     the slot, that relationship is unchanged. */
+  .cards { display:grid; gap:var(--s3);
+           grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
+  .card-slot { display:flex; flex-direction:column; min-width:0; }
+
+  /* ---- walkthrough cards ----
+     Rounded cards rest flat on a hairline. Hover deepens the hairline and adds
+     the one soft shadow (UI v2); authoring and keyboard focus take the lead
+     border and focus ring. Drafts keep their dashed outline.
+
+     This is a <div>, not an <a>. It used to be an anchor with the ... menu
+     button appended inside it — a button nested in a link, which is invalid,
+     recovered from differently by different browsers, and leaves a screen
+     reader announcing one link with a control it cannot reach. The title
+     carries the link now and stretches over the card with ::after, so the
+     whole card is still one click target and the menu button is a real
+     sibling above it. */
+  .card { position:relative; display:flex; flex-direction:column;
+          background:var(--surface); border:var(--line) solid var(--border);
+          border-radius:var(--radius-container); color:inherit; overflow:hidden; height:100%;
+          transition:border-color var(--dur-control) var(--ease-settle),
+                     box-shadow var(--dur-control) var(--ease-settle); }
+  .card:hover { border-color:var(--border-strong); box-shadow:var(--shadow-soft); }
+  .card--authoring, .card:focus-within { border-color:var(--primary);
+                box-shadow:var(--focus-ring); }
+  /* A card with a status strip or authoring panel welded under it squares off
+     its bottom corners, and the last piece of the stack takes them instead. */
+  .card-slot > .card:not(:last-child) { border-bottom-left-radius:0; border-bottom-right-radius:0;
+          height:auto; flex:1 0 auto; }
+  /* A piece welded under a card is one more section of the same object: no
+     corners of its own until it is the last, the card's own edge on every
+     side (a strip is a .notice, which would otherwise keep its rounded
+     corners and tinted left edge mid-stack). The row's spare height goes to
+     a queued card's authoring panel, else to the card itself — never to a
+     tinted strip — so cell bottoms line up across a row. */
+  .card-slot > .card ~ * { border:var(--line) solid var(--border); border-top:0;
+          border-radius:0; margin:0; }
+  .card-slot > :last-child:not(.card) { border-radius:0 0 var(--radius-container) var(--radius-container); }
+  .card-slot:has(> .author) > .card { flex:0 0 auto; }
+  .card-slot > .author { flex:1 0 auto; }
+  /* The weld follows the card's own edge: dashed under a draft, the lead
+     under the one being authored. */
+  .card-slot > .card--draft ~ * { border-style:dashed; border-color:var(--border-dashed); }
+  .card-slot > .card--authoring ~ * { border-style:solid; border-color:var(--lead); }
+  /* Hover lifts the whole stack, not just its top section: a shadow on the
+     card alone would end at the weld. */
+  .card-slot:has(> .card ~ *) > .card:hover { box-shadow:none; }
+  .card-slot:has(> .card ~ *):has(> .card:hover) { box-shadow:var(--shadow-soft);
+          border-radius:var(--radius-container); }
+  .card--draft { border-style:dashed; border-color:var(--border-dashed); }
+  /* The card the banner is talking about. A draft's border is a dashed
+     hairline in the neutral; the one being authored takes the lead, solid, so
+     a glance at the queue says which cell is moving. The banner carries the
+     words — this is only the tie between the two. */
+  .card--authoring { border-style:solid; border-color:var(--lead); }
+  .card--authoring .card-thumb { border-bottom-style:solid;
+          border-bottom-color:var(--lead); }
+  /* Focus has to land on the card, not on an invisible inline title box. */
+  .card:focus-within { border-color:var(--primary); }
+
+  /* The capture. This product's only permitted imagery is a real frame from
+     the customer's own screen, unstyled and untinted — so the shelf shows it.
+     16:10 is the shape of the viewport the capture came from. object-position
+     is top: a captured page's identity is in its header and first rows, and
+     centring would crop exactly that away. */
+  .card-thumb { position:relative; aspect-ratio:16/10; background:var(--surface-2);
+          border-bottom:var(--line) solid var(--border); overflow:hidden; }
+  .card--draft .card-thumb { border-bottom-style:dashed;
+          border-bottom-color:var(--border-dashed); }
+  .card-thumb img { width:100%; height:100%; object-fit:cover;
+          object-position:top center; display:block; }
+  /* The frame is in flight. Without this the box sits at --surface-2 looking
+     exactly like the no-capture plate below, so a slow first load and "this
+     one has no capture" are the same picture — and the first paint of a shelf
+     is precisely when that is most confusing, because on the very first
+     request /api/.../thumb has to fetch the full frame and downscale it before
+     it can cache anything. That is the only request that pays: the route holds
+     the finished bytes in memory afterwards, and the browser holds them for
+     ten minutes and then revalidates with an ETag, so a second visit comes off
+     within a frame or never shows at all.
+
+     An overlay rather than a background on .card-thumb itself: the box owns
+     the card's bottom border, and breathing the border with the fill reads as
+     the whole card flickering. Absolute, so it paints above the <img> and a
+     half-decoded frame never shows through the pulse; the box is already
+     position:relative and overflow:hidden for the corners.
+
+     The fill is one neutral rather than a token because it has to lift a dark
+     plate and sink a light one, and --skeleton is bound to the dark
+     --surface-2r — the same value as this plate — so it would be invisible
+     here in dark mode. */
+  .card-thumb.is-loading::before { content:""; position:absolute; inset:0;
+          background:rgba(127,127,140,.14);
+          animation:sc-breathe 1.6s var(--ease-settle) infinite; }
+  /* Motion is the whole signal, so what is left without it has to be the
+     static tint — not nothing, which would put us back at the bare plate. */
+  @media (prefers-reduced-motion: reduce) {
+    .card-thumb.is-loading::before { animation:none; }
+  }
+  /* No capture on disk: the .card-thumb box above stays, empty, on the sunk
+     paper. It is a spacer and nothing more — the grid keeps its rhythm and the
+     row does not go ragged. It used to carry the walkthrough's initials, which
+     looked like a monogram for a product that does not have one and said
+     nothing the title underneath did not already say. */
+
+  .card-body { display:flex; flex-direction:column; gap:var(--s2);
+          padding:var(--s4) var(--s5); flex:1 1 auto; }
+  /* clear of the ... menu, which is 26px inset by --s3 */
+  .card-title { font-size:var(--type-body); font-weight:var(--weight-semibold); line-height:1.35;
+          padding-right:var(--s7); }
+  .card-title a { color:inherit; text-decoration:none; }
+  .card-title a:hover { text-decoration:underline; }
+  /* the stretched link: the anchor's hit area is the whole card, and the menu
+     button sits above it on z-index */
+  .card-title a::after { content:""; position:absolute; inset:0; z-index:1; }
+  /* the countable facts, so mono caps: 7 STEPS · 4 MIN */
+  .card-meta { font-family:var(--font-sans); font-size:11.5px; font-weight:var(--weight-medium);
+          letter-spacing:var(--track-label); text-transform:uppercase; color:var(--muted);
+          font-variant-numeric:tabular-nums; }
+  /* "also in Billing" is information, not status — prose, no pill, and never
+     folded into the mono line where a collection's name would be shouted */
+  .card-also { font-size:var(--type-small); color:var(--muted); }
+  /* What the walkthrough teaches, clamped to two lines. This used to be the
+     first 160 characters of intro.scenario, which opens in character ("You are
+     Priya Raman, billing coordinator…") and so spent three lines naming a
+     fictional person without ever saying what the task was. completion.summary
+     is written as a description of the task itself. */
+  .card-summary { font-size:var(--type-small); line-height:1.5; color:var(--text-soft);
+          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+          overflow:hidden; }
+  .card-pills { display:flex; gap:var(--s1); flex-wrap:wrap; margin-top:auto;
+          padding-top:var(--s1); }
+  .card-pills:empty { display:none; }
+
+  /* ---- the pass in flight ----
+     One block across the top of the page, above the queue, present only while
+     an authoring pass is running. The markup is in catalog.html; see the note
+     there for why it is not a line on a card any more.
+
+     The shape is the system's accent message — a soft lead-tinted surface
+     with a hairline (UI v2 dropped the left rule) — at panel scale rather
+     than caption scale. Nothing here is
+     position-fixed: the system reserves that for the player's top bar and a
+     dialog scrim, and a strip that follows the page down would be the fourth
+     thing on screen competing with the customer's own captured frames. It sits
+     at the top of the flow, above everything, and the tab title carries the
+     state anywhere the block cannot reach. */
+  .authoring-now { display:none; }
+  .authoring-now.is-running {
+          display:flex; align-items:flex-start; justify-content:space-between;
+          gap:var(--s5); flex-wrap:wrap;
+          margin:0 0 var(--s6); padding:var(--s5);
+          background:var(--tint-accent);
+          border:var(--line) solid color-mix(in srgb, var(--primary) 30%, transparent);
+          border-radius:var(--radius-container); }
+  .an-body { display:flex; flex-direction:column; gap:var(--s2);
+          min-width:0; flex:1 1 320px; }
+  .an-head { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; }
+  /* The eyebrow is the one lead-hued string in the block: it names the state,
+     and the hue is assigned to it rather than sprayed over the panel. It takes
+     --primary rather than --lead because this is text — cyan deepens to
+     --lead-deep on the light theme to hold contrast, and --primary is the slot
+     that already resolves to the right one of the two. The 3px rule above
+     stays --lead: that is a graphic, and it is what .notice--accent uses. */
+  .an-eyebrow { display:inline-flex; align-items:center; gap:var(--s2);
+          color:var(--primary); }
+  .an-title { font-size:var(--type-h3); font-weight:var(--weight-semibold);
+          line-height:1.25; letter-spacing:var(--track-heading);
+          overflow-wrap:anywhere; }
+  /* The phase line is the only part that changes every few seconds, so
+     setAuthoringPhase() repaints this node alone. */
+  .an-phase { font-size:var(--type-small); color:var(--text-soft); line-height:1.55; }
+  .an-note { margin:0; max-width:60ch; }
+  .an-actions { display:flex; gap:var(--s2); flex:none; }
+
+  /* ---- authoring queue ----
+     A strip across the top of the page, above the shelf, and rendered at all
+     only while something is waiting. It was a permanent right-hand column,
+     which meant the library lived in 55% of the width and the other 40% was
+     blank in the steady state where every walkthrough is authored.
+
+     Wider cells than the library's: a queued card carries controls, and the
+     queue is a worklist a few items long rather than a shelf to scan. */
+  .queue-strip { margin:0 0 var(--s7); padding-bottom:var(--s6);
+          border-bottom:var(--line) solid var(--border); }
+  .queue-strip:empty { display:none; }
+  .queue-strip .cards { grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); }
+
+  /* A queued draft's controls sit in a panel welded to the bottom of its card,
+     so the pair reads as one object rather than as two. */
+  .author { background:var(--surface); padding:var(--s4) var(--s5);
+          display:flex; flex-direction:column; gap:var(--s3); }
+  .a-row { display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap; }
+  .waiting { display:flex; align-items:center; gap:var(--s2);
+          font-size:var(--type-small); color:var(--muted); }
+  /* The status strip is the system's .notice, so it keeps the tint that
+     says which kind of message it is; its edges are the card's, from the
+     .card-slot rules above. Spacing between cells is the grid's gap now, so
+     nothing in the welded stack carries a margin of its own. */
+  .card-status { margin:0; }
+  /* Stop used to sit here, inside the running card's strip, styled as a link.
+     It is now the one real button in .authoring-now above — the block that
+     names the walkthrough it would stop. */
+  .upload-notice { margin:0 0 var(--s3); }
+
+  /* ---- card overflow menu ---- */
+  /* The dropdown is taller than the gap to the next card, so it overflows and
+     a later cell would paint over exactly the last item (Delete). Raising the
+     owning slot lifts it and its dropdown above later grid items. The card
+     itself clips (overflow:hidden, for the thumbnail's corners), so the menu
+     is raised on the slot and the dropdown escapes through it. */
+  .card-slot.menu-open { z-index:5; position:relative; }
+  .card-slot.menu-open .card { overflow:visible; }
+  /* A delete in flight: the card stays where it is, faded and inert, with its
+     "Deleting" strip beneath, until the server answers and it leaves the grid.
+     Only the card fades, so the strip stays at full contrast. */
+  .card-slot--deleting { pointer-events:none; }
+  .card-slot--deleting .card { opacity:.5; }
+  /* above the title's stretched ::after, or the link would swallow the click */
+  .card-menu { position:absolute; top:var(--s3); right:var(--s3); z-index:2; }
+  .card-menu-btn { width:28px; height:28px; padding:0; border:0;
+          border-radius:var(--radius-pill); background:transparent;
+          color:var(--muted); font-size:15px; line-height:1; cursor:pointer;
+          opacity:.6;
+          transition:opacity var(--dur-control) var(--ease-settle),
+                     background var(--dur-control) var(--ease-settle),
+                     color var(--dur-control) var(--ease-settle); }
+  /* Over a capture the button has arbitrary pixels behind it, so it takes the
+     opaque surface it would otherwise only get on hover. A captured screen is
+     never tinted or dimmed to make room for chrome — the control sits on its
+     own ground instead. */
+  .card-menu--on-thumb .card-menu-btn { background:var(--surface);
+          border:var(--line) solid var(--border); opacity:1; }
+  .card:hover .card-menu-btn { opacity:1; }
+  .card-menu-btn:hover, .card-menu-btn.open { background:var(--surface-2);
+          color:var(--text); opacity:1; }
+  /* A floating layer, and there are no shadows in this system: it separates
+     with a surface step and a 1px hairline, the same as every other panel.
+     --shadow-modal is `none` and is left in place so a branded export cannot
+     leave it undefined and inherit one from somewhere else. */
+  .card-menu-dropdown { position:absolute; top:32px; right:0; min-width:180px;
+          background:var(--surface); border:var(--line) solid var(--border);
+          border-radius:var(--radius-control); box-shadow:var(--shadow-pop); padding:var(--s1); z-index:5; }
+  .card-menu-dropdown button { display:flex; align-items:center; gap:var(--s2);
+          width:100%; text-align:left; background:none; border:0;
+          border-radius:var(--radius-control); padding:8px 10px;
+          font-size:var(--type-small); font-weight:var(--weight-medium);
+          color:var(--text); cursor:pointer; }
+  .card-menu-dropdown button svg { flex-shrink:0; }
+  .card-menu-dropdown button:hover { background:var(--surface-2); }
+  .card-menu-dropdown button:disabled { color:var(--disabled-text); cursor:default; }
+  .card-menu-dropdown button:disabled:hover { background:none; }
+  .card-menu-dropdown button.danger { color:var(--error); }
+  .card-menu-dropdown button.danger:hover { background:var(--surface-2); }
+
+  /* ---- dialogs ----
+     Native <dialog> carrying the system's .modal — the one place in the
+     system with a shadow. The UA rule that hides a closed dialog is a UA
+     rule, and .modal's display:flex is an author rule, so it would win: hence
+     the explicit :not([open]). The UA's own padding and border have to go the
+     same way. */
+  dialog.modal { padding:0; color:var(--text); }
+  dialog.modal:not([open]) { display:none; }
+  dialog.modal::backdrop { background:var(--scrim); }
+  .modal--wide { max-width:520px; }
+  /* .modal-body already spaces its children, so the fields inside it do not
+     also carry their own bottom margin */
+  .modal-body .field { margin-bottom:0; }
+  .field-row { display:flex; align-items:flex-start; justify-content:space-between;
+          gap:var(--s4); }
+  .field-row .field { flex:1 1 auto; }
+  .field-row input[type=checkbox] { width:17px; height:17px; flex:none;
+          margin-top:3px; accent-color:var(--primary); cursor:pointer; }
+  .field-row .input--num { width:88px; flex:none; text-align:center; }
+
+  /* ---- embed ---- */
+  /* Published is a word AND a fill, so the toggle still reads with colour off.
+     Selected is filled with the lead and lettered in --on-primary, the same
+     move the mode switch makes in the player: a selected state is a fill
+     everywhere in this system, never a tint. */
+  #embed-toggle.on { background:var(--lead); border-color:var(--lead);
+          color:var(--on-lead); }
+  #embed-toggle.on:hover { background:var(--lead-hover);
+          border-color:var(--lead-hover); }
+  #embed-code-wrap { display:flex; flex-direction:column; gap:var(--s2); }
+  #embed-code { white-space:pre; }
+  .embed-code-actions { display:flex; align-items:center;
+          justify-content:space-between; gap:var(--s3); }
+</style>
+<dialog class="modal" id="confirm-dialog">
+  <div class="modal-head"><h2 class="modal-title" id="confirm-title"></h2></div>
+  <div class="modal-body"><p id="confirm-body"></p></div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="confirm-no">Cancel</button>
+    <button type="button" class="button button--danger" id="confirm-yes">Delete</button>
+  </div>
+</dialog>
+<dialog class="modal" id="collection-dialog">
+  <div class="modal-head">
+    <h2 class="modal-title" id="collection-dlg-title">New collection</h2>
+  </div>
+  <div class="modal-body">
+    <p class="small">A collection is an ordered set of walkthroughs — an onboarding path, a role, a course. A walkthrough can sit in more than one.</p>
+    <div class="notice notice--error" id="collection-err" hidden></div>
+    <div class="field">
+      <label class="field-label" for="collection-name">Name</label>
+      <input class="input" type="text" id="collection-name" maxlength="80" autocomplete="off"
+             placeholder="New support rep onboarding">
+    </div>
+    <div class="field">
+      <label class="field-label" for="collection-desc">Description</label>
+      <input class="input" type="text" id="collection-desc" maxlength="200" autocomplete="off"
+             placeholder="Everything a new hire does in week one.">
+      <span class="field-hint">Optional. What someone learns by working through it.</span>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="collection-cancel">Cancel</button>
+    <button type="button" class="button button--primary" id="collection-save">Create</button>
+  </div>
+</dialog>
+<dialog class="modal modal--wide" id="assign-dialog">
+  <div class="modal-head"><h2 class="modal-title">Add to a collection</h2></div>
+  <div class="modal-body">
+    <p class="small" id="assign-what"></p>
+    <div class="notice notice--error" id="assign-err" hidden></div>
+    <div class="assign-list" id="assign-list"></div>
+    <div class="field">
+      <button type="button" class="button button--ghost button--sm" id="assign-new">New collection</button>
+      <input class="input" type="text" id="assign-new-name" maxlength="80" autocomplete="off"
+             placeholder="Name the collection" hidden>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="assign-cancel">Cancel</button>
+    <button type="button" class="button button--primary" id="assign-save">Save</button>
+  </div>
+</dialog>
+<dialog class="modal modal--wide" id="export-dialog">
+  <div class="modal-head"><h2 class="modal-title">Download standalone walkthrough</h2></div>
+  <div class="modal-body">
+    <p class="small">Choose the brand and format. Either way, the download plays offline — no server required.</p>
+    <div class="field">
+      <label class="field-label" for="export-brand">Brand</label>
+      <select class="select" id="export-brand"><option>Loading…</option></select>
+      <span class="field-hint">Applies this profile's colours, fonts, logo, and wordmark.</span>
+    </div>
+    <div class="field">
+      <label class="field-label" for="export-format">Format</label>
+      <select class="select" id="export-format">
+        <option value="html">Single HTML file</option>
+        <option value="zip">Folder (.zip)</option>
+        <option value="scorm">SCORM 2004 package (.zip)</option>
+        <option value="scorm12">SCORM 1.2 package (.zip)</option>
+      </select>
+      <span class="field-hint">A single HTML file, a folder (as a .zip) with index.html plus an assets/ folder, or a SCORM package for uploading to an LMS.</span>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <span class="field-label">Include the intro page</span>
+        <span class="field-hint">Turn off to start directly in the walkthrough.</span>
+      </div>
+      <input type="checkbox" id="export-intro" checked aria-label="Include the intro page">
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="export-cancel">Cancel</button>
+    <button type="button" class="button button--primary" id="export-go">Download</button>
+  </div>
+</dialog>
+<dialog class="modal modal--wide" id="embed-dialog">
+  <div class="modal-head"><h2 class="modal-title">Embed on your site</h2></div>
+  <div class="modal-body">
+    <p class="small">Publish a public copy of this walkthrough and get a snippet that adds a Help button and modal to any web page.</p>
+    <div class="field">
+      <label class="field-label" for="embed-brand">Brand</label>
+      <select class="select" id="embed-brand"><option>Loading…</option></select>
+      <span class="field-hint">Applies this profile's colours, fonts, logo, and wordmark.</span>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <span class="field-label">Include the intro page</span>
+        <span class="field-hint">The opening scenario and objectives screen. Ignored when Structure is "Just the viewport."</span>
+      </div>
+      <input type="checkbox" id="embed-intro" checked aria-label="Include the intro page">
+    </div>
+    <div class="field">
+      <label class="field-label" for="embed-chrome">Structure</label>
+      <select class="select" id="embed-chrome">
+        <option value="full">Entire player</option>
+        <option value="viewport">Just the viewport</option>
+      </select>
+      <span class="field-hint">"Entire player" shows the normal top bar and step panel. "Just the viewport" strips all of that away and loops the demo in a bare, bordered card.</span>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <span class="field-label">Dim the page behind it</span>
+        <span class="field-hint">Adds a translucent overlay over your site while the embed is open.</span>
+      </div>
+      <input type="checkbox" id="embed-backdrop" checked aria-label="Dim the page behind it">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <span class="field-label">Max width</span>
+        <span class="field-hint">Caps how wide the embed can grow, in pixels. Leave blank for no cap.</span>
+      </div>
+      <input class="input input--mono input--num" type="number" id="embed-max-width"
+             min="240" max="2000" step="10" placeholder="auto" aria-label="Max width in pixels">
+    </div>
+    <div id="embed-code-wrap" class="hidden">
+      <textarea class="textarea textarea--mono" id="embed-code" readonly rows="5"
+                spellcheck="false" onclick="this.select()"></textarea>
+      <div class="embed-code-actions">
+        <span class="small muted" id="embed-status">Paste before &lt;/body&gt; on any page.</span>
+        <button type="button" class="button button--tertiary button--sm" id="embed-copy">Copy code</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="embed-close">Close</button>
+    <button type="button" class="button button--primary" id="embed-toggle" disabled>…</button>
+  </div>
+</dialog>
+<style>
+  /* ---- AI log ----
+     Everything the AI did to one walkthrough, newest first: authoring passes
+     and AI assist requests. The card's status strip says only whether a pass
+     worked; warnings, full errors and the progress trail live here. */
+  .modal--log { max-width:660px; }
+  .log-sub { margin-top:2px; }
+  .log-entries { display:flex; flex-direction:column; gap:var(--s3); }
+  .log-entry { border:var(--line) solid var(--border); border-radius:var(--radius-container);
+          padding:var(--s4) var(--s5); display:flex; flex-direction:column; gap:var(--s3);
+          background:var(--surface); }
+  .log-head { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; }
+  .log-outcome { font-weight:var(--weight-medium); color:var(--text); }
+  .log-when { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .log-quote { margin:0; padding:var(--s2) var(--s3); border-radius:var(--radius-control);
+          background:var(--surface-2); color:var(--text); white-space:pre-wrap;
+          overflow-wrap:anywhere; }
+  .log-text { color:var(--text-soft); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .log-error { padding:var(--s3); border-radius:var(--radius-control);
+          background:var(--tint-error); color:var(--error); }
+  .log-error p { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .log-list { margin:var(--s2) 0 0; padding-left:1.2em; display:flex;
+          flex-direction:column; gap:4px; overflow-wrap:anywhere; }
+  .log-details summary { cursor:pointer; color:var(--text-soft); font-size:var(--type-small); }
+  .log-details summary:hover { color:var(--text); }
+  .log-details[open] summary { margin-bottom:var(--s2); }
+  .log-trail { list-style:none; margin:0; padding:0; display:flex; flex-direction:column;
+          gap:3px; font-size:12px; color:var(--text-soft); }
+  .log-trail li { display:grid; grid-template-columns:44px minmax(0, 1fr); gap:var(--s2); }
+  .log-trail time { color:var(--muted); }
+  .log-trail span { overflow-wrap:anywhere; }
+  .log-empty { padding:var(--s5) 0; text-align:center; }
+</style>
+<dialog class="modal modal--log" id="log-dialog" aria-labelledby="log-title">
+  <div class="modal-head">
+    <div>
+      <h2 class="modal-title" id="log-title">AI log</h2>
+      <p class="small muted log-sub" id="log-sub"></p>
+    </div>
+  </div>
+  <div class="modal-body" id="log-body"></div>
+  <div class="modal-foot">
+    <button type="button" class="button button--tertiary" id="log-close">Close</button>
+  </div>
+</dialog>
+<script>
+// The pass in flight, or null: { id, phase, message, jobId, startedAt }.
+// The catalog authors one walkthrough at a time and this is the whole state
+// of that — the banner above the queue, the running card's border, the queue
+// head's count, the tab title and the 10s poll's guard all read it. It used
+// to be a bare id, which was enough to gate the poll and nothing else.
+let authoringPass = null;
+const authoringIdNow = () => (authoringPass ? authoringPass.id : null);
+let uploadBusy = false;
+let uploadNotice = null;       // {cls, html} — shown only before a card exists
+const cardStatus = {};         // walkthrough id -> {cls, html}, survives re-renders
+const deleting = new Set();    // walkthrough ids with a delete in flight, survives re-renders
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// "ok" and "err" are the two tones the catalog reports outcomes in; "busy" is
+// work in flight (a delete), drawn in the Sky hint tint that means progress. The system
+// draws a message as a left rule and a line of prose — .notice, not a tinted
+// box with an icon — so a tone is just which colour that rule takes.
+const noticeClass = (cls) => "notice" + (cls === "err" ? " notice--error" :
+                                         cls === "busy" ? " notice--hint" : "");
+
+// card-menu action icons — same stroke style as the player's topbar icons
+const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+const ICON_EDIT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+const ICON_EMBED = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
+const ICON_DELETE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+const ICON_COLLECTION = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 22 8.5 12 15 2 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/></svg>';
+const ICON_REVIEW = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICON_RESET = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+const ICON_LOG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>';
+const ICON_UP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>';
+const ICON_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>';
+
+function setUploadNotice(cls, html) {
+  uploadNotice = html ? { cls, html } : null;
+  let n = document.getElementById("upload-notice");
+  if (!uploadNotice) { if (n) n.remove(); return; }
+  if (!n) {
+    n = document.createElement("div");
+    n.id = "upload-notice";
+    document.getElementById("cards").appendChild(n);
+  }
+  n.className = "upload-notice " + noticeClass(uploadNotice.cls);
+  n.innerHTML = uploadNotice.html;
+}
+
+// A walkthrough filed into two collections renders one card per section, all
+// carrying the same data-walkthrough. querySelector (singular) would have
+// updated only the first, leaving the other copies with no status strip and no
+// "attached" corner treatment — hence querySelectorAll throughout.
+function setCardStatus(id, cls, html) {
+  if (html) cardStatus[id] = { cls, html }; else delete cardStatus[id];
+  const sel = '[data-walkthrough="' + id + '"]';
+  const cards = [...document.querySelectorAll(".card" + sel)];
+  if (!html) {
+    document.querySelectorAll(".card-status" + sel).forEach((s) => s.remove());
+    return;
+  }
+  // The card and its strip are siblings inside the .card-slot grid cell, so
+  // this insert is unchanged by the move from a stack to a grid: what used to
+  // be "next sibling in #cards" is now "next sibling in the slot".
+  for (const card of cards) {
+    let strip = card.nextElementSibling;
+    // a queued card's next sibling is its .author panel, not a strip
+    if (!strip || !strip.classList.contains("card-status")) {
+      strip = document.createElement("div");
+      strip.dataset.walkthrough = id;
+      card.insertAdjacentElement("afterend", strip);
+    }
+    strip.className = "card-status " + noticeClass(cls);
+    strip.innerHTML = html;
+  }
+}
+
+let openCardMenu = null;   // { wrap, dropdown, btn } for the currently open "..." menu, or null
+
+function closeCardMenu() {
+  if (!openCardMenu) return;
+  openCardMenu.dropdown.remove();
+  openCardMenu.btn.classList.remove("open");
+  if (openCardMenu.card) openCardMenu.card.classList.remove("menu-open");
+  openCardMenu = null;
+}
+document.addEventListener("click", closeCardMenu);
+
+// One dropdown at a time, shared by the card menus and the collection-head
+// menus. wrap.closest(".card") is null for a section head, which is fine.
+function openMenu(wrap, btn, build) {
+  const reopening = !(openCardMenu && openCardMenu.wrap === wrap);
+  closeCardMenu();
+  if (!reopening) return;
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "card-menu-dropdown";
+  dropdown.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+  build(dropdown);
+
+  wrap.appendChild(dropdown);
+  btn.classList.add("open");
+  // Lift this cell over the grid items after it for as long as the menu is
+  // open — see the .card-slot.menu-open note in the stylesheet above. The
+  // slot, not the card: the card clips (overflow:hidden, for the thumbnail),
+  // so the dropdown has to escape through it.
+  const card = wrap.closest(".card-slot");
+  if (card) card.classList.add("menu-open");
+  openCardMenu = { wrap, dropdown, btn, card };
+}
+
+function menuItem(dropdown, icon, label, opts) {
+  opts = opts || {};
+  const b = document.createElement("button");
+  b.type = "button";
+  b.innerHTML = icon;                                // icons are constants
+  b.appendChild(document.createTextNode(label));     // labels go in as text
+  if (opts.danger) b.className = "danger";
+  if (opts.title) b.title = opts.title;
+  if (opts.disabled) {
+    b.disabled = true;
+  } else {
+    b.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeCardMenu();
+      opts.onClick();
+    });
+  }
+  dropdown.appendChild(b);
+  return b;
+}
+
+function toggleCardMenu(wrap, btn, l, ctx) {
+  ctx = ctx || {};
+  openMenu(wrap, btn, (dropdown) => {
+    // Review capture and the AI log are for diagnosing a capture or a pass.
+    const review = () => menuItem(dropdown, ICON_REVIEW, "Review capture", {
+      title: "Inspect the raw capture behind this walkthrough",
+      onClick: () => {
+        window.location.href = "/review/" + encodeURIComponent(l.id);
+      },
+    });
+    // On a queued draft the capture is the whole of it, so reviewing it
+    // leads the menu.
+    if (ctx.queued) review();
+    // A queued draft has nothing authored to download or embed yet.
+    if (!ctx.queued) {
+      menuItem(dropdown, ICON_DOWNLOAD, "Download\u2026", {
+        title: "Choose a brand and format to download",
+        onClick: () => openExportDialog(l),
+      });
+    }
+    menuItem(dropdown, ICON_EDIT, "Edit", {
+      title: "Edit this walkthrough",
+      onClick: () => {
+        window.location.href = "/player/" + encodeURIComponent(l.id) + "?edit=1";
+      },
+    });
+    // The raw capture stays on disk after authoring — the player replays over
+    // it — so the review page keeps working.
+    if (!ctx.queued) review();
+    menuItem(dropdown, ICON_LOG, "AI log\u2026", {
+      title: "Every AI authoring pass and AI assist request, with warnings and errors in full",
+      onClick: () => openLogDialog(l),
+    });
+    // Undo the authoring pass so it can be run again on the same capture.
+    // Offered only where there is a pass to undo.
+    if (!ctx.queued) {
+      menuItem(dropdown, ICON_RESET, "Reset to draft\u2026", {
+        title: "Undo the AI authoring pass and put this walkthrough back in the queue",
+        onClick: () => resetToDraft(l),
+      });
+    }
+    // A queued draft is a work item, not a library item — there is nothing
+    // authored to file yet.
+    if (!ctx.queued) {
+      menuItem(dropdown, ICON_COLLECTION, "Add to collection\u2026", {
+        title: "File this walkthrough into one or more collections",
+        onClick: () => openAssignDialog(l),
+      });
+    }
+    // Reordering is offered only in an unfiltered view: under a filter the
+    // order on screen is not the stored order, so "move up" would jump the
+    // card past something you cannot see.
+    if (ctx.reorderable) {
+      menuItem(dropdown, ICON_UP, "Move up",
+        { disabled: ctx.index === 0, onClick: () => moveWithinCollection(ctx, -1) });
+      menuItem(dropdown, ICON_DOWN, "Move down",
+        { disabled: ctx.index === ctx.size - 1,
+          onClick: () => moveWithinCollection(ctx, 1) });
+    }
+    if (!ctx.queued) {
+      menuItem(dropdown, ICON_EMBED, "Embed\u2026", {
+        title: "Embed this walkthrough on your site",
+        onClick: () => openEmbedDialog(l),
+      });
+    }
+    menuItem(dropdown, ICON_DELETE, "Delete",
+      { danger: true, onClick: () => deleteWalkthrough(l) });
+  });
+}
+
+function collectionMenu(collection) {
+  const wrap = document.createElement("div");
+  wrap.className = "sec-menu";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "card-menu-btn";
+  btn.title = "Rename or delete this collection";
+  // The glyph is decoration; without this the accessible name is literally
+  // "\u22ee". Named after the collection so several heads on one page are
+  // distinguishable in a screen reader's control list.
+  btn.setAttribute("aria-label",
+    "Options for " + (collection.name || "this collection"));
+  btn.textContent = "\u22ee";
+  btn.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    openMenu(wrap, btn, (dropdown) => {
+      menuItem(dropdown, ICON_EDIT, "Rename\u2026",
+        { onClick: () => openCollectionDialog(collection) });
+      menuItem(dropdown, ICON_DELETE, "Delete collection",
+        { danger: true, onClick: () => deleteCollection(collection) });
+    });
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+let exportTarget = null;   // the walkthrough {id, ...} the export dialog currently targets
+
+async function populateExportBrandSelect() {
+  const select = document.getElementById("export-brand");
+  select.innerHTML = '<option>Loading\u2026</option>';
+  try {
+    const r = await fetch("/api/branding");
+    const col = await r.json();
+    select.innerHTML = "";
+    (col.profiles || []).forEach((p) => {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = p.read_only ? (p.brand_name + " \u2014 my brand") : p.brand_name;
+      if (p.id === col.active) o.selected = true;
+      select.appendChild(o);
+    });
+    if (!select.options.length) select.innerHTML = '<option value="">Default</option>';
+  } catch (e) {
+    select.innerHTML = '<option value="">Default (my brand)</option>';
+  }
+}
+
+function openExportDialog(l) {
+  exportTarget = l;
+  populateExportBrandSelect();
+  document.getElementById("export-dialog").showModal();
+}
+
+const exportDialog = document.getElementById("export-dialog");
+document.getElementById("export-cancel").addEventListener("click", () => exportDialog.close());
+exportDialog.addEventListener("click", (e) => { if (e.target === exportDialog) exportDialog.close(); });
+document.getElementById("export-go").addEventListener("click", () => {
+  if (!exportTarget) return;
+  const brandId = document.getElementById("export-brand").value;
+  const params = [];
+  if (brandId) params.push("profile=" + encodeURIComponent(brandId));
+  if (!document.getElementById("export-intro").checked) params.push("intro=0");
+  const format = document.getElementById("export-format").value;
+  const route = format === "zip" ? "export-zip" : format.startsWith("scorm") ? "export-scorm" : "export";
+  if (format === "scorm12") params.push("version=1.2");
+  const q = params.length ? "?" + params.join("&") : "";
+  exportDialog.close();
+  window.location.href = "/api/walkthroughs/" + encodeURIComponent(exportTarget.id) + "/" + route + q;
+});
+
+/* ---- embed on your site (inline dialog, no navigation) ----
+ * Publishing writes walkthroughs/<id>/embed.json server-side, which opens the
+ * public /embed/<id> URL; the snippet loads static/embed.js on the customer's
+ * page (floating Help button + modal iframe). Every choice here is frozen into
+ * the publication — while embedding is on, changing any option re-publishes
+ * silently so the dialog always shows the truth.
+ * NB: tag strings below are split ("<scr"+"ipt") so this script block never
+ * contains a literal script tag that would close it early. */
+let embedTarget = null;   // walkthrough {id, title} the embed dialog targets
+let embedState = null;    // publication state from the server, or null
+const embedDialog = document.getElementById("embed-dialog");
+const eb = (id) => document.getElementById(id);
+
+async function populateEmbedBrandSelect() {
+  const select = eb("embed-brand");
+  select.innerHTML = '<option>Loading\u2026</option>';
+  try {
+    const r = await fetch("/api/branding");
+    const col = await r.json();
+    select.innerHTML = "";
+    (col.profiles || []).forEach((p) => {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = p.read_only ? (p.brand_name + " \u2014 my brand") : p.brand_name;
+      if (p.id === col.active) o.selected = true;
+      select.appendChild(o);
+    });
+    if (!select.options.length) select.innerHTML = '<option value="">Default</option>';
+  } catch (e) {
+    select.innerHTML = '<option value="">Default (my brand)</option>';
+  }
+}
+
+async function openEmbedDialog(l) {
+  embedTarget = l;
+  embedState = null;
+  const btn = eb("embed-toggle");
+  btn.disabled = true;
+  btn.textContent = "\u2026";
+  btn.classList.remove("on");
+  eb("embed-code-wrap").classList.add("hidden");
+  setEmbedStatus("Paste before the closing body tag on any page.");
+  embedDialog.showModal();
+  await populateEmbedBrandSelect();
+  await loadEmbedState();
+}
+
+async function loadEmbedState() {
+  if (!embedTarget) return;
+  try {
+    const r = await fetch("/api/walkthroughs/" + encodeURIComponent(embedTarget.id) + "/embed");
+    embedState = r.ok ? await r.json() : { enabled: false };
+  } catch (e) {
+    embedState = { enabled: false };
+  }
+  // reflect the last-published choices (or sane defaults) in the form
+  if (embedState.profile) eb("embed-brand").value = embedState.profile;
+  eb("embed-intro").checked = embedState.intro !== false;
+  eb("embed-chrome").value = embedState.chrome === "viewport" ? "viewport" : "full";
+  eb("embed-backdrop").checked = embedState.backdrop !== false;
+  eb("embed-max-width").value = embedState.max_width || "";
+  renderEmbedUi();
+}
+
+function renderEmbedUi() {
+  const on = !!(embedState && embedState.enabled);
+  const btn = eb("embed-toggle");
+  btn.disabled = false;
+  btn.textContent = on ? "\u2713 Embedding on" : "Enable embedding";
+  btn.classList.toggle("on", on);
+  eb("embed-code-wrap").classList.toggle("hidden", !on);
+  if (on) eb("embed-code").value = embedSnippet();
+}
+
+function embedSnippet() {
+  const attr = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const openTag = "<scr" + "ipt", closeTag = "</scr" + "ipt>";
+  const lines = [
+    openTag + ' src="' + location.origin + '/static/embed.js" defer',
+    '        data-sc-src="' + location.origin + '/embed/' + encodeURIComponent(embedTarget.id) + '"',
+    '        data-sc-title="' + attr(embedTarget.title || "Help") + '"',
+  ];
+  if (embedState && embedState.backdrop === false) lines.push('        data-sc-backdrop="0"');
+  if (embedState && embedState.max_width) lines.push('        data-sc-max-width="' + embedState.max_width + '"');
+  lines[lines.length - 1] += ">" + closeTag;
+  return lines.join("\n");
+}
+
+// Reads the dialog's current option set (used to save and to keep the
+// generated snippet in sync with what's on screen).
+function readEmbedForm() {
+  const raw = eb("embed-max-width").value.trim();
+  const max_width = raw ? Math.max(240, Math.min(2000, parseInt(raw, 10) || 0)) || null : null;
+  return {
+    profile: eb("embed-brand").value || null,
+    intro: eb("embed-intro").checked,
+    chrome: eb("embed-chrome").value === "viewport" ? "viewport" : "full",
+    backdrop: eb("embed-backdrop").checked,
+    max_width,
+  };
+}
+
+async function saveEmbedSettings(enabled) {
+  const r = await fetch("/api/walkthroughs/" + encodeURIComponent(embedTarget.id) + "/embed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({ enabled }, readEmbedForm())),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error ||
+    ("The server refused the request (" + r.status + "). Try again."));
+  return d;
+}
+
+async function toggleEmbed() {
+  if (!embedTarget) return;
+  const btn = eb("embed-toggle");
+  const enable = !(embedState && embedState.enabled);
+  btn.disabled = true;
+  try {
+    embedState = await saveEmbedSettings(enable);
+    setEmbedStatus(enable ? "Paste before the closing body tag on any page."
+                          : "The public embed URL is now disabled.");
+  } catch (e) {
+    setEmbedStatus("Could not save: " + e.message, true);
+  }
+  renderEmbedUi();
+}
+
+// Any option changed while embedding is on: re-publish with the new choices.
+async function syncEmbedSettings() {
+  if (!(embedState && embedState.enabled)) return;
+  try {
+    embedState = await saveEmbedSettings(true);
+    setEmbedStatus("Embed updated with the new settings.");
+  } catch (e) {
+    setEmbedStatus("Could not update the embed: " + e.message, true);
+  }
+  renderEmbedUi();
+}
+["embed-brand", "embed-intro", "embed-chrome", "embed-backdrop", "embed-max-width"]
+  .forEach((id) => eb(id).addEventListener("change", syncEmbedSettings));
+
+function setEmbedStatus(text, isError) {
+  const s = eb("embed-status");
+  s.textContent = text;
+  s.style.color = isError ? "var(--error)" : "";
+}
+
+async function copyEmbedCode() {
+  const code = eb("embed-code");
+  try {
+    await navigator.clipboard.writeText(code.value);
+  } catch (e) {
+    code.select();
+    document.execCommand("copy"); // clipboard API blocked — legacy fallback
+  }
+  setEmbedStatus("Copied \u2014 paste it before the closing body tag.");
+}
+
+eb("embed-close").addEventListener("click", () => embedDialog.close());
+embedDialog.addEventListener("click", (e) => { if (e.target === embedDialog) embedDialog.close(); });
+
+/* ---- AI log ---------------------------------------------------------------
+ * Built with textContent throughout: every string in here came from a model,
+ * a validator or the author's own typing. */
+const logDialog = document.getElementById("log-dialog");
+
+function lg(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// Word plus fill, never the dot alone.
+const LOG_OUTCOMES = {
+  authored: ["Authored", "published"],
+  saved: ["Changed", "published"],
+  answered: ["Answered", "progress"],
+  failed: ["Failed", "error"],
+  failed_after_save: ["Failed after saving", "error"],
+  cancelled: ["Stopped", "idle"],
+  cancelled_after_save: ["Stopped after saving", "idle"],
+};
+
+function logDuration(e) {
+  const ms = Date.parse(e.finished_at) - Date.parse(e.started_at);
+  if (!(ms >= 0)) return "";
+  const s = Math.round(ms / 1000);
+  return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
+}
+
+function logWhen(row) {
+  const d = new Date(row.created_at);
+  const when = isNaN(d) ? "" : d.toLocaleString(undefined,
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const took = logDuration(row.entry || {});
+  return when + (took ? " \u00b7 " + took : "");
+}
+
+function logDetails(summary, body) {
+  const d = lg("details", "log-details");
+  d.append(lg("summary", null, summary), body);
+  return d;
+}
+
+function logList(items, ordered) {
+  const ul = lg(ordered ? "ol" : "ul", "log-list small");
+  for (const it of items) ul.append(lg("li", null, it));
+  return ul;
+}
+
+function logWarnings(warnings) {
+  const w = warnings || [];
+  if (!w.length) return lg("p", "small muted", "No warnings.");
+  return logDetails(w.length === 1 ? "1 warning" : w.length + " warnings", logList(w));
+}
+
+// An exhausted loop's message is a sentence and then every remaining
+// validator error joined with "; " — shown as the list it is.
+function logError(err) {
+  const box = lg("div", "log-error small");
+  const msg = String((err && err.message) || "Unknown error");
+  const at = msg.indexOf("Last validation result:");
+  if (at > 0) {
+    box.append(lg("p", null, msg.slice(0, at).trim()));
+    const rest = msg.slice(at + "Last validation result:".length).trim();
+    box.append(logList(rest.split(/;\s+/).filter(Boolean)));
+  } else {
+    box.append(lg("p", null, msg));
+  }
+  return box;
+}
+
+function logTrail(trail) {
+  if (!(trail || []).length) return null;
+  const ol = lg("ol", "log-trail");
+  for (const t of trail) {
+    const li = lg("li");
+    const secs = Math.round(t.t || 0);
+    li.append(lg("time", "mono", Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0")),
+              lg("span", null, t.phase + (t.message ? " \u2014 " + t.message : "")));
+    ol.append(li);
+  }
+  return logDetails("Progress (" + trail.length + ")", ol);
+}
+
+function logEntry(row) {
+  const e = row.entry || {};
+  const art = lg("article", "log-entry");
+  const head = lg("header", "log-head");
+  const [word, dot] = LOG_OUTCOMES[e.outcome] || [e.outcome || "Unknown", "idle"];
+  const status = lg("span", "status-row");
+  status.append(lg("span", "dot dot--" + dot), lg("span", "log-outcome", word));
+  head.append(status,
+              lg("span", "label label--sm", row.kind === "author" ? "Authoring pass" : "AI assist"),
+              lg("time", "small muted log-when", logWhen(row)));
+  art.append(head);
+
+  if (row.kind === "author") {
+    const r = e.result;
+    if (r) {
+      art.append(lg("p", "small log-text",
+        r.steps_before + " captured actions became " + r.steps_after + " steps."));
+      art.append(logWarnings(r.warnings));
+    }
+  } else {
+    const req = e.request || {};
+    if (req.instruction) art.append(lg("p", "small log-quote", String(req.instruction).trim()));
+    const ctx = [];
+    if (Number.isInteger(req.current_step)) ctx.push("Step " + (req.current_step + 1));
+    const sel = req.selection;
+    if (sel && (sel.text || sel.selector)) ctx.push("pointing at " + (sel.text ? "\u201c" + sel.text + "\u201d" : sel.selector));
+    if (ctx.length) art.append(lg("p", "small muted", ctx.join(" \u00b7 ")));
+    const r = e.result || {};
+    const said = r.answer || r.summary;
+    if (said) art.append(lg("p", "small log-text", said));
+    if (r.suggested_change) art.append(lg("p", "small muted", "Suggested: " + r.suggested_change));
+    if ((e.pages_rewritten || []).length) {
+      art.append(lg("p", "small muted", "Captured pages rewritten: " + e.pages_rewritten.join(", ")));
+    }
+    if (e.outcome === "saved") art.append(logWarnings(r.warnings));
+  }
+  if (e.error && e.outcome && !e.outcome.startsWith("cancelled")) art.append(logError(e.error));
+  const trail = logTrail(e.trail);
+  if (trail) art.append(trail);
+  return art;
+}
+
+async function openLogDialog(l) {
+  eb("log-sub").textContent = l.title || "";
+  const body = eb("log-body");
+  body.textContent = "";
+  body.append(lg("p", "small muted", "Loading\u2026"));
+  logDialog.showModal();
+  let rows;
+  try {
+    const r = await fetch("/api/walkthroughs/" + encodeURIComponent(l.id) + "/logs");
+    if (!r.ok) throw new Error(r.status);
+    rows = await r.json();
+  } catch (e) {
+    body.textContent = "";
+    body.append(lg("p", "small", "The log could not be loaded. Try again in a moment."));
+    return;
+  }
+  body.textContent = "";
+  if (!rows.length) {
+    body.append(lg("p", "small muted log-empty",
+      "Nothing logged yet. Authoring passes and AI assist requests appear here as they run."));
+    return;
+  }
+  const list = lg("div", "log-entries");
+  for (const row of rows) list.append(logEntry(row));
+  body.append(list);
+}
+
+eb("log-close").addEventListener("click", () => logDialog.close());
+logDialog.addEventListener("click", (e) => { if (e.target === logDialog) logDialog.close(); });
+
+// "See the AI log" in a failed pass's status strip. Delegated: the strip is
+// rebuilt on every repaint.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("[data-open-log]");
+  if (!a) return;
+  e.preventDefault();
+  const id = a.dataset.openLog;
+  openLogDialog(lastList.find((w) => w.id === id) || { id });
+});
+eb("embed-toggle").addEventListener("click", toggleEmbed);
+eb("embed-copy").addEventListener("click", copyEmbedCode);
+
+// "captured 2h ago" — the queue is ordered by this, so it earns a label
+function agoLabel(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return "";
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return "captured just now";
+  if (mins < 60) return "captured " + mins + "m ago";
+  if (mins < 60 * 24) return "captured " + Math.round(mins / 60) + "h ago";
+  return "captured " + Math.round(mins / 1440) + "d ago";
+}
+
+function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+
+// `title` reaches this from a user-named collection, so it goes in as text.
+// This used to build the whole head with innerHTML, which was safe only for as
+// long as every caller passed a literal.
+//
+// A collapsible section puts the whole name inside the button rather than
+// standing a lone chevron next to it: that is the standard disclosure pattern
+// (heading wraps button), the accessible name comes out as the collection's
+// own name for free, and the target is the width of the title instead of 20px.
+function sectionHead(cls, title, count, opts) {
+  opts = opts || {};
+  const h = document.createElement("div");
+  h.className = "sec " + cls;
+  const h2 = document.createElement("h2");
+  const label = document.createTextNode(title);
+  if (opts.sectionKey) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sec-toggle";
+    btn.title = opts.collapsed ? "Expand" : "Collapse";
+    // the caret is decoration; aria-expanded is what carries the state
+    btn.setAttribute("aria-expanded", String(!opts.collapsed));
+    const chev = document.createElement("span");
+    chev.className = "chev";
+    chev.setAttribute("aria-hidden", "true");
+    btn.append(chev, label);
+    btn.addEventListener("click", () => toggleSection(opts.sectionKey));
+    h2.appendChild(btn);
+  } else {
+    h2.appendChild(label);
+  }
+  h.appendChild(h2);
+  const c = document.createElement("span");
+  c.className = "label count";
+  c.textContent = count;
+  h.appendChild(c);
+  if (opts.collection) h.appendChild(collectionMenu(opts.collection));
+  return h;
+}
+
+// One card + whatever panel belongs under it. Queued cards show capture facts
+// and the authoring controls; library cards show the authored metadata.
+//
+// A queued card is the same card with a dashed border: a draft is an
+// unfinished thing in the same library, not a different kind of object.
+// "also in Billing" when a walkthrough is filed in more than one place, so a
+// second card of the same thing reads as deliberate rather than as a duplicate
+// bug. Names the others rather than counting them — "also in Billing" explains
+// itself where "in 2 collections" sends you looking. Information, not status,
+// so it is prose on its own line: not a pill, and not folded into the mono
+// meta line, where a collection's name would come out shouted.
+function alsoInLabel(l, currentCollectionId) {
+  const others = collections
+    .filter((c) => c.id !== currentCollectionId && c.walkthroughs.includes(l.id))
+    .map((c) => c.name);
+  if (!others.length) return "";
+  const shown = others.slice(0, 2).join(", ");
+  const rest = others.length > 2 ? " +" + (others.length - 2) + " more" : "";
+  return "also in " + esc(shown) + esc(rest);
+}
+
+/* The capture itself. This product's only permitted imagery is a real frame
+ * from the customer's own screen, and the shelf is where recognising one
+ * matters most: a returning author finds the invoice flow by seeing the
+ * invoice screen, not by reading "create-a-new-invoice".
+ *
+ * /api/walkthroughs/<id>/thumb 404s when the capture has no screenshot and no
+ * render on disk (some are page.html only), so the plate underneath is
+ * revealed by removing a failed <img> rather than gated on a flag that
+ * /api/walkthroughs would have to stat the disk for on every poll.
+ */
+function renderThumb(card, l) {
+  const box = document.createElement("div");
+  box.className = "card-thumb";
+  // No plate content. This used to carry two initials taken from the title,
+  // which read as a logo for a product that has none and repeated the title
+  // sitting directly beneath it in full. The empty raised-surface box is
+  // enough to hold the grid's rhythm, which is all the fallback was ever for.
+  const img = document.createElement("img");
+  // setAttribute rather than the IDL properties: `loading` and `decoding` are
+  // hints a browser is free not to implement, and assigning to an unsupported
+  // property is a silent no-op that leaves no attribute behind for the markup
+  // to be checked against.
+  img.setAttribute("loading", "lazy");   // don't fetch a whole shelf at once
+  img.setAttribute("decoding", "async");
+  // Decorative: the title beside it is the accessible name, and only the
+  // customer could describe a screenshot of their own product.
+  img.setAttribute("alt", "");
+  // Both endings clear the loading state, and clearing it is all the error
+  // path adds: removing the <img> already reveals the plate, and a plate that
+  // kept pulsing would promise a frame that is never coming.
+  const settled = () => box.classList.remove("is-loading");
+  img.addEventListener("load", settled);
+  img.addEventListener("error", () => { settled(); img.remove(); });
+  box.classList.add("is-loading");
+  img.src = "/api/walkthroughs/" + encodeURIComponent(l.id) + "/thumb";
+  // A frame already in the memory cache can finish before the listener above
+  // ever gets a turn, which would leave the pulse running under a painted
+  // image. `complete` is true for a failed load too, hence naturalWidth.
+  if (img.complete && img.naturalWidth > 0) settled();
+  box.appendChild(img);
+  card.appendChild(box);
+}
+
+function renderCard(box, l, queued, ctx) {
+  ctx = Object.assign({}, ctx, { queued });
+  const authoring = authoringIdNow() === l.id;
+  // The countable facts, and they are always mono: 7 STEPS · 4 MIN. The caps
+  // come from .card-meta, so a track name is not shouted in the markup.
+  const meta = queued
+    ? [plural(l.steps, "step"), agoLabel(l.captured_at)]
+        .filter(Boolean).join(" \u00b7 ")
+    : [l.track ? esc(l.track) : "",
+       plural(l.steps, "step"),
+       "~" + esc(l.estimated_minutes ?? "?") + " min"].filter(Boolean).join(" \u00b7 ");
+  const also = queued ? "" : alsoInLabel(l, ctx.collectionId);
+  // A queued draft's summary is still the placeholder TODO, so it shows
+  // nothing. `summary` is completion.summary: what the walkthrough teaches.
+  // This used to be the first 160 characters of intro.scenario, which opens
+  // in character ("You are Priya Raman, billing coordinator at the agency...")
+  // and so spent three lines naming a fictional person without ever saying
+  // what the task was. .card-summary clamps to two lines rather than cutting
+  // mid-word at a fixed count.
+  const summary = queued ? "" : (l.summary || "");
+
+  // The grid cell. A card can have a status strip and an authoring panel
+  // welded under it, and the three have to travel as one cell - see the
+  // .card-slot note in the stylesheet.
+  const slot = document.createElement("div");
+  slot.className = "card-slot" + (deleting.has(l.id) ? " card-slot--deleting" : "");
+  slot.dataset.walkthrough = l.id;
+  if (deleting.has(l.id)) slot.setAttribute("aria-busy", "true");
+  const card = document.createElement("div");
+  card.className = "card" + (queued ? " card--draft" : "") +
+                   (authoring ? " card--authoring" : "");
+  card.dataset.walkthrough = l.id;
+  renderThumb(card, l);
+
+  const body = document.createElement("div");
+  body.className = "card-body";
+  body.innerHTML =
+    '<div class="card-title"><a href="/player/' + encodeURIComponent(l.id) +
+      '">' + esc(l.title || l.id) + "</a></div>" +
+    '<div class="card-meta">' + meta + "</div>" +
+    (also ? '<div class="card-also">' + also + "</div>" : "") +
+    (summary ? '<div class="card-summary">' + esc(summary) + "</div>" : "") +
+    // A queued card says it is not authored yet; a library card needs no pill.
+    (queued ? '<div class="card-pills"><span class="pill pill--draft">Not authored</span></div>'
+            : "");
+  card.appendChild(body);
+
+  const menuWrap = document.createElement("div");
+  menuWrap.className = "card-menu card-menu--on-thumb";
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "card-menu-btn";
+  menuBtn.title = "More options";
+  // The button is no longer inside the link, so it needs a name of its own.
+  menuBtn.setAttribute("aria-label",
+    "More options for " + String(l.title || l.id));
+  menuBtn.textContent = "\u22ee";
+  menuBtn.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    toggleCardMenu(menuWrap, menuBtn, l, ctx);
+  });
+  menuWrap.appendChild(menuBtn);
+  card.appendChild(menuWrap);
+  slot.appendChild(card);
+  box.appendChild(slot);
+
+  const stat = cardStatus[l.id];
+  if (stat) {
+    const strip = document.createElement("div");
+    strip.className = "card-status " + noticeClass(stat.cls);
+    strip.dataset.walkthrough = l.id;
+    strip.innerHTML = stat.html;
+    slot.appendChild(strip);
+  }
+  if (!queued || authoring) return;   // the running item's status strip is its panel
+  const p = document.createElement("div");
+  p.className = "author";
+  p.dataset.walkthrough = l.id;
+  if (authoringPass) {
+    // another pass holds the single authoring slot — say so rather than
+    // leaving a dead button with no explanation
+    p.innerHTML = '<div class="waiting"><span class="dot dot--idle"></span>' +
+      "Waiting \u2014 one pass runs at a time</div>";
+  } else {
+    // Page rendering is always checked before the pass runs (the server
+    // renders each captured page against its screenshot and steers authoring
+    // around anything that doesn't render). It used to be a checkbox here;
+    // the only thing opting out ever bought was a worse walkthrough.
+    p.innerHTML = '<div class="a-row">' +
+      '<button class="button button--primary button--sm" type="button">Author with AI</button></div>';
+    p.querySelector("button").addEventListener("click", () =>
+      authorWalkthrough(l.id));
+  }
+  slot.appendChild(p);
+}
+
+/* ---- collections --------------------------------------------------------
+ * Named, ordered sets of walkthroughs; a walkthrough may sit in several. Read
+ * from /api/collections (never folded into /api/walkthroughs — membership is
+ * per-account state, not a property of one record). Every mutation answers
+ * with the whole list, so this is always a wholesale replace, never a merge.
+ */
+let collections = [];
+
+// Collapse state is a viewer preference — it belongs to the person looking,
+// not to the collection — so it lives in localStorage beside the player's
+// settings rather than on the server. localStorage can throw outright in
+// sandboxed or opaque-origin contexts; a collapsed section is not worth a
+// broken catalog. Same helpers as static/player.js.
+const storeGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const storeSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no persistence */ } };
+// "sc-", the same prefix the player's own settings use: one namespace per
+// origin, so a viewer's catalog and player preferences sit together.
+//
+// There is no fallback read of an older spelling. localStorage is scoped to an
+// origin, and this application has never served from one under any earlier
+// name — so a key written by a predecessor cannot exist in a browser that
+// reaches this page, and reading for one would be code that can only ever
+// return null.
+const COLLAPSE_KEY = "sc-collections-collapsed";
+
+let collapsed = new Set();
+try {
+  const raw = JSON.parse(storeGet(COLLAPSE_KEY) || "[]");
+  collapsed = new Set(Array.isArray(raw) ? raw : []);
+} catch (e) { collapsed = new Set(); }
+
+function toggleSection(key) {
+  if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+  storeSet(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+  repaint();
+}
+
+function setDlgError(id, message) {
+  const el = document.getElementById(id);
+  el.textContent = message || "";
+  el.hidden = !message;
+}
+
+async function collectionsFetch(path, body, method) {
+  const r = await fetch(path, {
+    method: method || "POST",
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error ||
+    ("The server refused the request (" + r.status + "). Try again."));
+  collections = d.collections || [];
+  return d;
+}
+
+/* ---- create / rename ---- */
+let collectionTarget = null;   // the collection being renamed, or null to create
+const collectionDialog = document.getElementById("collection-dialog");
+
+function openCollectionDialog(collection) {
+  collectionTarget = collection || null;
+  document.getElementById("collection-dlg-title").textContent =
+    collection ? "Rename collection" : "New collection";
+  document.getElementById("collection-save").textContent = collection ? "Save" : "Create";
+  document.getElementById("collection-name").value = collection ? collection.name : "";
+  document.getElementById("collection-desc").value =
+    collection ? (collection.description || "") : "";
+  setDlgError("collection-err", "");
+  collectionDialog.showModal();
+  document.getElementById("collection-name").focus();
+}
+
+async function saveCollectionDialog() {
+  const payload = {
+    name: document.getElementById("collection-name").value,
+    description: document.getElementById("collection-desc").value,
+  };
+  try {
+    await collectionsFetch(collectionTarget
+      ? "/api/collections/" + encodeURIComponent(collectionTarget.id)
+      : "/api/collections", payload);
+    collectionDialog.close();
+    repaint();
+  } catch (e) {
+    setDlgError("collection-err", e.message);
+  }
+}
+
+document.getElementById("lib-new")
+  .addEventListener("click", () => openCollectionDialog(null));
+document.getElementById("collection-cancel")
+  .addEventListener("click", () => collectionDialog.close());
+document.getElementById("collection-save")
+  .addEventListener("click", saveCollectionDialog);
+collectionDialog.addEventListener("click",
+  (e) => { if (e.target === collectionDialog) collectionDialog.close(); });
+document.getElementById("collection-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); saveCollectionDialog(); }
+});
+
+async function deleteCollection(collection) {
+  const ok = await confirmDialog(
+    "Delete “" + (collection.name || collection.id) + "”?",
+    "The walkthroughs stay in your library — only the grouping is removed. " +
+    "Any that end up in no collection move to <strong>Unsorted</strong>.");
+  if (!ok) return;
+  try {
+    await collectionsFetch(
+      "/api/collections/" + encodeURIComponent(collection.id), undefined, "DELETE");
+    collapsed.delete("c:" + collection.id);
+    storeSet(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+    repaint();
+  } catch (e) {
+    setUploadNotice("err", "Could not delete the collection: " + esc(e.message));
+  }
+}
+
+/* ---- add a walkthrough to collections ---- */
+let assignTarget = null;
+const assignDialog = document.getElementById("assign-dialog");
+
+function openAssignDialog(l) {
+  assignTarget = l;
+  document.getElementById("assign-what").textContent =
+    "Choose the collections “" + (l.title || l.id) + "” belongs to.";
+  const box = document.getElementById("assign-list");
+  box.innerHTML = "";
+  if (!collections.length) {
+    const none = document.createElement("div");
+    none.className = "assign-none";
+    none.textContent = "You have no collections yet — name one below.";
+    box.appendChild(none);
+  }
+  for (const c of collections) {
+    const row = document.createElement("label");
+    row.className = "assign-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = c.id;
+    cb.checked = c.walkthroughs.includes(l.id);
+    const name = document.createElement("span");
+    name.className = "an";
+    name.textContent = c.name;                  // user input -> text, never HTML
+    const count = document.createElement("span");
+    count.className = "label ac";
+    count.textContent = plural(c.count, "walkthrough");
+    row.append(cb, name, count);
+    box.appendChild(row);
+  }
+  const field = document.getElementById("assign-new-name");
+  const button = document.getElementById("assign-new");
+  field.value = "";
+  // with nothing to tick, the name field is the only thing to do — show it
+  field.hidden = collections.length > 0;
+  button.hidden = collections.length === 0;
+  setDlgError("assign-err", "");
+  assignDialog.showModal();
+}
+
+async function saveAssign() {
+  const chosen = [...document.querySelectorAll("#assign-list input[type=checkbox]")]
+    .filter((cb) => cb.checked).map((cb) => cb.value);
+  const field = document.getElementById("assign-new-name");
+  try {
+    if (!field.hidden && field.value.trim()) {
+      const created = await collectionsFetch("/api/collections", { name: field.value });
+      chosen.push(created.collection.id);
+    }
+    // One request for the whole set: three ticked boxes must not be three
+    // writes that can half-apply.
+    await collectionsFetch(
+      "/api/walkthroughs/" + encodeURIComponent(assignTarget.id) + "/collections",
+      { collections: chosen });
+    assignDialog.close();
+    repaint();
+  } catch (e) {
+    setDlgError("assign-err", e.message);
+  }
+}
+
+document.getElementById("assign-new").addEventListener("click", (e) => {
+  e.preventDefault();
+  const field = document.getElementById("assign-new-name");
+  field.hidden = false;
+  e.target.hidden = true;
+  field.focus();
+});
+document.getElementById("assign-cancel")
+  .addEventListener("click", () => assignDialog.close());
+document.getElementById("assign-save").addEventListener("click", saveAssign);
+assignDialog.addEventListener("click",
+  (e) => { if (e.target === assignDialog) assignDialog.close(); });
+
+/* ---- reorder within a collection ---- */
+// Up/down rather than drag-and-drop: the cards are <a> elements whose native
+// drag is a link drag, and buttons are keyboard-reachable for free.
+async function moveWithinCollection(ctx, delta) {
+  const c = collections.find((x) => x.id === ctx.collectionId);
+  if (!c) return;
+  const ids = [...c.walkthroughs];
+  const from = ids.indexOf(ctx.id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  ids.splice(to, 0, ids.splice(from, 1)[0]);
+  try {
+    await collectionsFetch(
+      "/api/collections/" + encodeURIComponent(ctx.collectionId) + "/items",
+      { walkthroughs: ids });
+    repaint();
+  } catch (e) {
+    setUploadNotice("err", "Could not reorder the collection: " + esc(e.message));
+  }
+}
+
+/* ---- library filter / sort ----------------------------------------------
+ * The controls live in catalog.html above #cards; only their state lives here.
+ * paintCatalog() reads this on every render, so the 10s poll picks up a chosen
+ * filter for free and nothing has to be re-applied afterwards.
+ *
+ * Filtering NEVER touches the authoring queue. That is a worklist, not a
+ * shelf — hiding something that is waiting on you is a bug, not a feature. */
+const filterState = { q: "", track: "", sort: "authored" };
+
+const libBar = document.getElementById("lib-bar");
+const libQ = document.getElementById("lib-q");
+const libTracks = document.getElementById("lib-tracks");
+const libSort = document.getElementById("lib-sort");
+const libStatus = document.getElementById("lib-status");
+const libCount = document.getElementById("lib-count");
+const libClear = document.getElementById("lib-clear");
+const catCounts = document.getElementById("cat-counts");
+
+const filterActive = () => !!(filterState.q || filterState.track);
+
+function matchesFilter(l) {
+  if (filterState.track && (l.track || "").trim() !== filterState.track) return false;
+  if (!filterState.q) return true;
+  const hay = [l.title, l.track, l.scenario].join(" ").toLowerCase();
+  // every term must match somewhere — "fail redem" finds "Fix a Failed Redemption"
+  return filterState.q.split(/\s+/).every((t) => hay.includes(t));
+}
+
+// captured_at is the fallback for records authored before authoring.json existed
+const authoredKey = (l) => Date.parse(l.authored_at || "") ||
+                           Date.parse(l.captured_at || "") || 0;
+
+function sortComparator(mode) {
+  if (mode === "title")
+    return (a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id));
+  if (mode === "steps") return (a, b) => (b.steps || 0) - (a.steps || 0);
+  if (mode === "minutes")
+    return (a, b) => (b.estimated_minutes || 0) - (a.estimated_minutes || 0);
+  return (a, b) => authoredKey(b) - authoredKey(a);
+}
+
+// Rebuild the track chips only when the distinct set actually changed.
+// Rewriting them on every 10s poll would drop the active state mid-click.
+//
+// These were a <select>. Tracks are few and stable, so a menu hid a list short
+// enough to show: chips put the whole axis on screen, and .chip.is-active
+// already carries the selected state the system draws everywhere else.
+let trackOptionsSig = null;
+function populateTrackFilter(authored) {
+  const tracks = [...new Set(authored.map((l) => (l.track || "").trim())
+                                     .filter((t) => t && t !== "TODO"))].sort();
+  const sig = JSON.stringify(tracks);
+  // A track that vanished (renamed by an AI edit, or its last walkthrough
+  // deleted) must not leave the library filtered to nothing with no visible
+  // cause - fall back to all tracks.
+  if (filterState.track && !tracks.includes(filterState.track)) filterState.track = "";
+  if (sig === trackOptionsSig) { paintTrackChips(); return; }
+  trackOptionsSig = sig;
+  libTracks.innerHTML = "";
+  // One chip per track and no "all" chip: clearing is deselecting the active
+  // one, which is what a pressed toggle already offers.
+  for (const t of tracks) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip";
+    b.dataset.track = t;
+    b.textContent = t;                   // a track name is user data -> text
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => {
+      filterState.track = filterState.track === t ? "" : t;
+      repaint();
+    });
+    libTracks.appendChild(b);
+  }
+  // one track is not a filter, it is a fact about every card
+  libTracks.hidden = tracks.length < 2;
+  paintTrackChips();
+}
+
+function paintTrackChips() {
+  for (const b of libTracks.children) {
+    const on = b.dataset.track === filterState.track;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
+}
+
+// Filter changes repaint from the list already in hand. Re-fetching per
+// keystroke would put a request on the wire per character for no new data.
+let lastList = [];
+const repaint = () => paintCatalog(lastList);
+
+libQ.addEventListener("input", () => {
+  filterState.q = libQ.value.trim().toLowerCase();
+  repaint();
+});
+libSort.addEventListener("change", () => {
+  filterState.sort = libSort.value;
+  repaint();
+});
+libClear.addEventListener("click", () => {
+  libQ.value = "";
+  filterState.q = "";
+  filterState.track = "";
+  repaint();
+});
+
+// The payload the last paint was built from.
+//
+// The poll refetches every 10 seconds whether or not anything changed, and
+// paintCatalog() answers by wiping #cards and rebuilding every card from
+// scratch — including a fresh <img> per card, which discards the frame the
+// browser had decoded and re-runs the whole shelf's lazy-load bookkeeping. Six
+// times a minute, for a library that changes maybe twice a day. The thumbnails
+// are cached hard now (an ETag and a memo behind the route), so the requests
+// are cheap — but the cheapest request is the one not made, and the steadiest
+// shelf is the one not rebuilt.
+//
+// The cost of skipping is that a relative label goes stale between changes:
+// "captured 59m ago" stays that way until something moves. It is recomputed on
+// the next real paint, and nobody reads a shelf for the minute hand.
+let lastSignature = null;
+
+// Server settings for the catalog (GET /api/settings), or null when that
+// request failed.
+let account = null;
+
+async function renderCatalog(quiet) {
+  let list, cols;
+  try {
+    // Two requests, one round trip. A collections failure must not take the
+    // library down with it — an unreadable file already degrades to "no
+    // collections" server-side, and the flat list is still the useful answer.
+    [list, cols, account] = await Promise.all([
+      fetch("/api/walkthroughs").then((r) => r.json()),
+      fetch("/api/collections").then((r) => (r.ok ? r.json() : { collections: [] }))
+                               .catch(() => ({ collections: [] })),
+      // Optional in the same way: without it the cards still render.
+      fetch("/api/settings").then((r) => (r.ok ? r.json() : null))
+                            .catch(() => null),
+    ]);
+  } catch (e) { return; }
+  lastList = list;
+  collections = cols.collections || [];
+  // `quiet` is the poll, and the poll is the only caller allowed to decide
+  // nothing happened. Every other one has just changed something the payload
+  // cannot show — a pass starting or ending, a status strip, an upload notice,
+  // a collection reordered — so they repaint unconditionally.
+  const signature = JSON.stringify([list, collections, account]);
+  if (quiet && signature === lastSignature) return;
+  lastSignature = signature;
+  paintCatalog(list);
+}
+
+function paintCatalog(list) {
+  // One column, full width. #cards is still the library's box (and the upload
+  // notice's) so setUploadNotice keeps working unchanged; the queue is a strip
+  // above it rather than a permanent lane beside it.
+  const box = document.getElementById("cards");
+  const queueBox = document.getElementById("queue");
+  // The banner lives outside both and is not wiped here; this repaint is what
+  // gives a reconnected pass its walkthrough's real title once the list lands.
+  renderAuthoringBanner();
+  closeCardMenu();   // cards below get rebuilt from scratch — don't leave a stale open menu
+  box.innerHTML = "";
+  queueBox.innerHTML = "";
+  queueBox.className = "";
+  const key = (l) => Date.parse(l.captured_at || "") || 0;
+  // queue: oldest capture first, so it drains in the order things arrived
+  const queue = list.filter((l) => !l.authored).sort((a, b) => key(a) - key(b));
+  const authored = list.filter((l) => l.authored);
+  populateTrackFilter(authored);
+  // One of the queued drafts may be the one being authored right now, and it
+  // is not waiting for anything. Both counts on this page read this.
+  const running = queue.some((l) => l.id === authoringIdNow()) ? 1 : 0;
+  const waiting = queue.length - running;
+  // The shape of the library, in the head where the tagline used to be.
+  catCounts.textContent = list.length
+    ? [plural(authored.length, "walkthrough"),
+       running ? "1 authoring" : "",
+       waiting ? plural(waiting, "draft") + " waiting" : ""]
+        .filter(Boolean).join(" · ")
+    : "";
+  // A single walkthrough needs no search box — but never yank the bar away
+  // while it is in use, or a filtered-to-empty library reads as data loss.
+  libBar.hidden = authored.length < 2 && !collections.length && !filterActive();
+  const matched = new Set(authored.filter(matchesFilter).map((l) => l.id));
+  libStatus.hidden = !filterActive();
+  if (filterActive()) {
+    libCount.textContent = matched.size + " of " + plural(authored.length, "walkthrough");
+  }
+
+  if (queue.length) {
+    queueBox.className = "queue-strip";
+    // "3 waiting" was a lie while one of the three was being authored. The
+    // head is the second place a running pass is now visible, after the
+    // banner above it and before the card's own border.
+    queueBox.appendChild(sectionHead("queue-head", "Authoring queue",
+      [running ? "1 running" : "",
+       waiting ? waiting + " waiting" : ""].filter(Boolean).join(" \u00b7 ")));
+    const grid = document.createElement("div");
+    grid.className = "cards";
+    queueBox.appendChild(grid);
+    for (const l of queue) renderCard(grid, l, true);
+  }
+
+  // One section per collection, then whatever is in none of them. With no
+  // collections defined this collapses to the single "Library" head the
+  // catalog has always had — the feature stays invisible until it is used.
+  const byId = new Map(authored.map((l) => [l.id, l]));
+  const filed = new Set();
+
+  // Each section gets its own element so the boundary between two of them can
+  // be spaced and ruled in CSS (see .sec-group). Appending heads and cards
+  // straight into #cards, as this used to, left the DOM with no idea where one
+  // collection ended — so a boundary got the same 12px as the gap between two
+  // cards inside one, and the grouping never read on screen.
+  const section = (opts) => {
+    const group = document.createElement("section");
+    group.className = "sec-group";
+    box.appendChild(group);
+    // A live filter overrides collapse for the duration: a match hiding inside
+    // a collapsed section would make the "N of M" count look like a lie.
+    const isShut = collapsed.has(opts.sectionKey) && !filterActive();
+    group.appendChild(sectionHead(opts.cls, opts.title, opts.count, {
+      sectionKey: opts.sectionKey, collapsed: isShut, collection: opts.collection,
+    }));
+    if (opts.description) {
+      const d = document.createElement("div");
+      d.className = "sec-desc";
+      d.textContent = opts.description;
+      group.appendChild(d);
+    }
+    if (isShut) return;
+    if (!opts.items.length) {
+      const e = document.createElement("p");
+      e.className = "sec-empty";
+      e.textContent = opts.emptyText;
+      group.appendChild(e);
+      return;
+    }
+    // The cards go in their own grid inside the section, so a section head and
+    // its description stay full-width rows above the columns rather than
+    // becoming grid items themselves.
+    const grid = document.createElement("div");
+    grid.className = "cards";
+    group.appendChild(grid);
+    opts.items.forEach((entry) => renderCard(grid, entry.l, false, entry.ctx));
+  };
+
+  for (const c of collections) {
+    // stored order is authoritative and is never re-sorted by the sort control
+    const stored = c.walkthroughs.map((id) => byId.get(id)).filter(Boolean);
+    stored.forEach((l) => filed.add(l.id));
+    const shown = stored.filter((l) => matched.has(l.id));
+    // while filtering, a section with nothing in it is noise
+    if (filterActive() && !shown.length) continue;
+    section({
+      cls: "collection-head", sectionKey: "c:" + c.id, title: c.name,
+      description: c.description, collection: c,
+      count: plural(shown.length, "walkthrough"),
+      emptyText: "Nothing in here yet — use the \u22ee menu on any walkthrough, "
+                 + "then Add to collection.",
+      items: shown.map((l) => ({
+        l,
+        ctx: { collectionId: c.id, id: l.id, index: stored.indexOf(l),
+               size: stored.length, reorderable: !filterActive() },
+      })),
+    });
+  }
+
+  const loose = authored.filter((l) => !filed.has(l.id))
+                        .filter((l) => matched.has(l.id))
+                        .sort(sortComparator(filterState.sort));
+  if (loose.length) {
+    section({
+      cls: "library-head",
+      sectionKey: collections.length ? "unsorted" : "library",
+      title: collections.length ? "Unsorted" : "Library",
+      count: plural(loose.length, "walkthrough"),
+      items: loose.map((l) => ({ l, ctx: {} })),
+    });
+  }
+
+  // Nothing rendered at all — an empty collection still leaves a head behind,
+  // so this only fires when there is genuinely nothing to show.
+  if (!box.querySelector(".sec")) {
+    if (filterActive()) {
+      box.innerHTML =
+        '<div class="empty"><div class="empty-title">No walkthroughs match</div>' +
+        '<p class="empty-body">The search term and the track filter have to match ' +
+        'the same walkthrough. Try one word, or clear the filters.</p></div>';
+    } else if (!queue.length && !uploadNotice) {
+      box.innerHTML =
+        '<div class="empty"><div class="empty-title">No walkthroughs yet</div>' +
+        '<p class="empty-body">Record one with the Captcher Recorder extension and it ' +
+        'arrives here as a draft.</p></div>';
+    }
+  }
+  if (uploadNotice) {
+    const n = document.createElement("div");
+    n.id = "upload-notice";
+    n.className = "upload-notice " + noticeClass(uploadNotice.cls);
+    n.innerHTML = uploadNotice.html;
+    box.appendChild(n);
+  }
+}
+
+// note: AI walkthrough editing is available headless (python3 author.py edit <id> "...")
+// and via the in-player editor; the catalog only authors drafts and deletes.
+
+function confirmDialog(title, bodyHtml) {
+  return new Promise((resolve) => {
+    const dlg = document.getElementById("confirm-dialog");
+    document.getElementById("confirm-title").textContent = title;
+    document.getElementById("confirm-body").innerHTML = bodyHtml;
+    const yes = document.getElementById("confirm-yes"),
+          no = document.getElementById("confirm-no");
+    const done = (v) => {
+      yes.onclick = no.onclick = dlg.oncancel = dlg.onclick = null;
+      dlg.close();
+      resolve(v);
+    };
+    yes.onclick = () => done(true);
+    no.onclick = () => done(false);
+    dlg.oncancel = (e) => { e.preventDefault(); done(false); };      // Esc key
+    dlg.onclick = (e) => { if (e.target === dlg) done(false); };     // backdrop click
+    dlg.showModal();
+    no.focus();  // safe default
+  });
+}
+
+// Mark every copy of a card (one per collection it sits in) as deleting, or
+// clear the mark. Applied to the live DOM here, and by the card builder on any
+// re-render that happens while the request is out.
+function setCardDeleting(id, on) {
+  if (on) deleting.add(id); else deleting.delete(id);
+  document.querySelectorAll('.card-slot[data-walkthrough="' + id + '"]').forEach((slot) => {
+    slot.classList.toggle("card-slot--deleting", on);
+    if (on) slot.setAttribute("aria-busy", "true"); else slot.removeAttribute("aria-busy");
+  });
+}
+
+async function deleteWalkthrough(l) {
+  if (deleting.has(l.id)) return;
+  const ok = await confirmDialog(
+    "Delete \u201c" + (l.title || l.id) + "\u201d?",
+    "This removes the walkthrough, its version history and every captured screen. " +
+    "It cannot be undone.");
+  if (!ok) return;
+  setCardDeleting(l.id, true);
+  setCardStatus(l.id, "busy",
+    '<span class="status-row" role="status"><span class="dot dot--progress dot--live"></span>' +
+    "Deleting the walkthrough and its captured screens\u2026</span>");
+  try {
+    const r = await fetch("/api/walkthroughs/" + encodeURIComponent(l.id), { method: "DELETE" });
+    const d = await r.json();
+    if (!r.ok) {
+      setCardDeleting(l.id, false);
+      setCardStatus(l.id, "err", esc(d.error || ("Delete failed (" + r.status + ")")));
+      return;
+    }
+    deleting.delete(l.id);
+    delete cardStatus[l.id];   // the card disappearing is the confirmation
+    await renderCatalog();
+  } catch (e) {
+    setCardDeleting(l.id, false);
+    setCardStatus(l.id, "err", "Delete failed: " + esc(e));
+  }
+}
+
+// Back to the draft ingest made, so the authoring pass can be re-run on the
+// same capture. The server keeps the authored version in history, so this is
+// a restore away from undone, but the card still asks: from the library's
+// point of view the walkthrough disappears into the queue.
+async function resetToDraft(l) {
+  if (deleting.has(l.id)) return;
+  const ok = await confirmDialog(
+    "Reset \u201c" + (l.title || l.id) + "\u201d to its draft?",
+    "This undoes the AI authoring pass and moves the walkthrough back to the authoring " +
+    "queue, ready to author again. Edits made since, and the render and replay checks, " +
+    "are cleared. The authored version stays in its version history.");
+  if (!ok) return;
+  setCardStatus(l.id, "busy",
+    '<span class="status-row" role="status"><span class="dot dot--progress dot--live"></span>' +
+    "Resetting to the draft\u2026</span>");
+  try {
+    const r = await fetch("/api/walkthroughs/" + encodeURIComponent(l.id) + "/reset-draft",
+                          { method: "POST" });
+    const d = await r.json();
+    if (!r.ok) {
+      setCardStatus(l.id, "err", esc(d.error || ("Reset failed (" + r.status + ")")));
+      return;
+    }
+    setCardStatus(l.id, "ok", "Back to its draft. Author it again when you are ready.");
+    await renderCatalog();
+  } catch (e) {
+    setCardStatus(l.id, "err", "Reset failed: " + esc(e));
+  }
+}
+
+// The authoring pass is the one call that can run for minutes, so it is the
+// one that runs as a background job: the POST returns a job id, progress
+// arrives over SSE, and the strip carries a Stop button. Everything else
+// (the AI edit in the player, the review page's two checks) still posts
+// synchronously and is unchanged.
+// The card's own line. It says which cell is moving and what it is doing;
+// the banner above the queue carries the walkthrough's name, the clock and
+// the one Stop button. Stop used to live here as well, and two of them on one
+// screen for one job read as two jobs.
+function authoringStrip(phase, message) {
+  return '<span class="dot dot--recording dot--live"></span> ' + esc(phase) +
+         (message ? " \u2014 " + esc(message) : "");
+}
+
+/* ---- the pass in flight ------------------------------------------------
+ * An authoring pass runs for minutes and used to announce itself as one line
+ * of small text on one card in a grid. Everything below is that state said
+ * once, loudly, at the top of the page: which walkthrough, what it is doing
+ * right now, how long it has been going, how to stop it, and — because a
+ * five-minute job is a job you go and do something else during — the same
+ * state in the tab title.
+ *
+ * There is no progress bar, and that is deliberate rather than lazy. The
+ * pass is an agentic loop that runs until the model stops asking for tools,
+ * so a fraction would be a guess dressed up as a measurement. A clock is not
+ * a guess.
+ */
+const BASE_TITLE = document.title;
+
+// Resolved on every paint rather than captured at the start: resumeRunningJobs
+// runs before the first /api/walkthroughs response lands, so the title is not
+// known yet when a reconnecting pass is first drawn.
+function authoringTitle() {
+  const rec = (lastList || []).find((l) => l.id === authoringPass.id);
+  return (rec && rec.title) || authoringPass.id;
+}
+
+const phaseLine = (p) => p.phase + (p.message ? " \u2014 " + p.message : "");
+
+// m:ss, ticking once a second.
+function elapsedLabel(startedAt) {
+  const s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function startAuthoringPass(id, startedAt) {
+  authoringPass = { id, phase: "Authoring with AI", message: "starting",
+                    jobId: null, startedAt: startedAt || Date.now() };
+  renderAuthoringBanner();
+}
+
+function endAuthoringPass() {
+  authoringPass = null;
+  renderAuthoringBanner();
+}
+
+// Only the phase line and the card's strip change between events, so neither
+// the banner nor the catalog is rebuilt for one.
+function setAuthoringPhase(phase, message) {
+  if (!authoringPass) return;
+  authoringPass.phase = phase;
+  authoringPass.message = message || "";
+  const line = document.getElementById("an-phase");
+  if (line) line.textContent = phaseLine(authoringPass);
+  setCardStatus(authoringPass.id, "ok", authoringStrip(phase, message));
+}
+
+function renderAuthoringBanner() {
+  const box = document.getElementById("authoring-now");
+  if (!box) return;
+  if (!authoringPass) {
+    box.className = "";
+    box.innerHTML = "";
+    if (document.title !== BASE_TITLE) document.title = BASE_TITLE;
+    return;
+  }
+  const p = authoringPass;
+  box.className = "authoring-now is-running";
+  box.innerHTML =
+    '<div class="an-body">' +
+      '<div class="an-head">' +
+        '<span class="label an-eyebrow">' +
+          '<span class="dot dot--recording dot--live"></span>authoring \u00b7 running' +
+        '</span>' +
+        '<span class="label mono an-elapsed" id="an-elapsed">' +
+          esc(elapsedLabel(p.startedAt)) + '</span>' +
+      '</div>' +
+      '<div class="an-title">' + esc(authoringTitle()) + '</div>' +
+      // aria-live so a screen reader hears the phase change without the
+      // banner stealing focus each time one lands
+      '<div class="an-phase" id="an-phase" role="status" aria-live="polite">' +
+        esc(phaseLine(p)) + '</div>' +
+      '<p class="an-note small muted">This takes a few minutes. The pass runs on ' +
+        'the server \u2014 closing the tab does not stop it, and this page picks it ' +
+        'up again when you come back.</p>' +
+    '</div>' +
+    // No job id yet means the POST that starts it has not answered, and there
+    // is nothing to cancel: a Stop that does nothing is worse than no Stop.
+    (p.jobId
+      ? '<div class="an-actions"><button class="button button--tertiary button--sm" ' +
+        'type="button" data-cancel-job="' + esc(p.jobId) + '"' +
+        (p.stopping ? " disabled" : "") + '>' +
+        (p.stopping ? "Stopping\u2026" : "Stop") + '</button></div>'
+      : "");
+  document.title = "Authoring\u2026 \u2014 " + BASE_TITLE;
+}
+
+// One ticker for the page. It repaints a single mono string and does nothing
+// at all while no pass is running.
+setInterval(() => {
+  if (!authoringPass) return;
+  const el = document.getElementById("an-elapsed");
+  if (el) el.textContent = elapsedLabel(authoringPass.startedAt);
+}, 1000);
+
+// One live EventSource at a time; the catalog only ever authors one card.
+let authoringStream = null;
+
+function watchAuthoringJob(id, jobId) {
+  return new Promise((resolve) => {
+    // A named fallback rather than a silent one: if EventSource is missing or
+    // the stream dies, the job is still running server-side and the result is
+    // still readable, so poll for it instead of stranding the card.
+    const finish = async (fromEvent) => {
+      if (authoringStream) { authoringStream.close(); authoringStream = null; }
+      if (fromEvent) return resolve(fromEvent);
+      try {
+        const r = await fetch("/api/jobs/" + encodeURIComponent(jobId));
+        resolve(r.ok ? await r.json() : { state: "error", error: "Lost track of the pass." });
+      } catch (e) {
+        resolve({ state: "error", error: "Lost track of the pass: " + e });
+      }
+    };
+    let src;
+    try {
+      src = new EventSource("/api/jobs/" + encodeURIComponent(jobId) + "/events");
+    } catch (e) { finish(null); return; }
+    authoringStream = src;
+    src.addEventListener("progress", (ev) => {
+      try {
+        const e = JSON.parse(ev.data);
+        setAuthoringPhase(e.phase, e.message);
+      } catch (_) { /* a malformed frame is not worth failing the pass over */ }
+    });
+    src.addEventListener("done", (ev) => {
+      try { finish(JSON.parse(ev.data)); } catch (_) { finish(null); }
+    });
+    src.onerror = () => finish(null);
+  });
+}
+
+async function cancelJob(jobId) {
+  try {
+    await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/cancel",
+                { method: "POST" });
+  } catch (_) { /* the terminal event still tells us what happened */ }
+}
+
+// What the card says when a pass ends: whether it worked, and nothing else.
+// Warnings never appear here — every pass is logged in full (the walkthrough
+// menu's "AI log"), and a strip under a card cannot carry
+// a validator report.
+function showAuthoringOutcome(id, job) {
+  if (job.state === "done") {
+    const d = job.result || {};
+    setCardStatus(id, "ok",
+      "Authored \u2014 " + esc(d.steps_after) + " steps. " +
+      '<a href="/player/' + encodeURIComponent(d.walkthrough_id || id) +
+      '">Open the walkthrough</a> to check it.');
+  } else if (job.state === "cancelled") {
+    setCardStatus(id, "err", "Stopped. The draft was left untouched.");
+  } else {
+    setCardStatus(id, "err",
+      esc(errorHeadline(job.error) || "Authoring failed.") +
+      ' <a href="#" data-open-log="' + esc(id) + '">See the AI log</a> for details.');
+  }
+}
+
+// The first sentence of a pass's error. An exhausted loop appends every
+// validator error still standing, which can run to a screenful; the
+// sentence before it says what happened, and the log keeps the rest.
+function errorHeadline(msg) {
+  const m = String(msg || "").trim();
+  const cut = m.search(/[.!?]\s/);
+  const first = cut > 0 ? m.slice(0, cut + 1) : m;
+  return first.length > 240 ? first.slice(0, 239) + "\u2026" : first;
+}
+
+async function authorWalkthrough(id) {
+  startAuthoringPass(id);
+  // the server always runs the render pre-check first (skipped only when a
+  // reviewed sidecar already carries the verdicts)
+  setAuthoringPhase("Authoring with AI", "checking page rendering first");
+  await renderCatalog();   // hides the button and the card's TODO placeholders
+  try {
+    const r = await fetch("/api/author?background=1", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walkthrough_id: id }) });
+    const started = await r.json();
+    // The banner's Stop appears here, not a moment earlier — see the note in
+    // renderAuthoringBanner().
+    if (authoringPass && started.job_id) {
+      authoringPass.jobId = started.job_id;
+      renderAuthoringBanner();
+    }
+    if (!r.ok) {
+      setCardStatus(id, "err",
+        esc(errorHeadline(started.error) || ("Authoring failed (" + r.status + ")")));
+      return;   // re-render below restores the retry button
+    }
+    const job = await watchAuthoringJob(id, started.job_id);
+    showAuthoringOutcome(id, job);
+  } catch (e) {
+    setCardStatus(id, "err", "Authoring failed: " + esc(e));
+  } finally {
+    endAuthoringPass();
+    await renderCatalog();
+  }
+}
+
+// Re-attach to a pass already running when the page loads. Without this a
+// reopened tab shows an idle card with an "Author with AI" button that would
+// start a second pass \u2014 which the server would refuse with a 409 the author
+// has no context for.
+async function resumeRunningJobs() {
+  let running = [];
+  try {
+    const r = await fetch("/api/jobs");
+    if (!r.ok) return;
+    running = await r.json();
+  } catch (_) { return; }
+  const pass = running.find((j) => j.kind === "author");
+  if (!pass) return;
+  // `elapsed` is the job's own seconds, so a reconnected pass shows the time
+  // it has actually been running rather than restarting the clock at 0:00.
+  startAuthoringPass(pass.walkthrough_id, Date.now() - (pass.elapsed || 0) * 1000);
+  authoringPass.jobId = pass.job_id;
+  setAuthoringPhase("Authoring with AI", "reconnecting");
+  await renderCatalog();
+  const job = await watchAuthoringJob(pass.walkthrough_id, pass.job_id);
+  showAuthoringOutcome(pass.walkthrough_id, job);
+  endAuthoringPass();
+  await renderCatalog();
+}
+
+// Stop lives inside the banner, which is rebuilt whenever the catalog
+// repaints — so it is delegated rather than bound, otherwise the handler
+// would be lost on the next repaint. `stopping` is state rather than just a
+// disabled attribute for the same reason cancellation is cooperative: a
+// progress event can still land after the click, and a rebuild would
+// otherwise draw a fresh, enabled Stop for a pass already winding down.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest && e.target.closest("[data-cancel-job]");
+  if (!btn) return;
+  e.preventDefault();
+  if (authoringPass && authoringPass.jobId === btn.dataset.cancelJob) {
+    authoringPass.stopping = true;
+  }
+  btn.disabled = true;
+  btn.textContent = "Stopping…";
+  cancelJob(btn.dataset.cancelJob);
+});
+
+renderCatalog();
+resumeRunningJobs();
+
+// The poll rebuilds every card from scratch, so it also tears down an open "..."
+// menu (renderCatalog calls closeCardMenu before wiping the box). With no guard
+// the menu died on the next tick — 0-10s after opening, depending on where the
+// click landed in the cycle — which read as "Delete is gone" rather than as a
+// bug. A refresh can always wait until the menu is closed; nothing on a card
+// changes while it is open.
+// A dialog reflects server state the poll would invalidate underneath the
+// person using it — reopening the assign dialog's checkboxes mid-tick would
+// silently discard what they had ticked.
+const anyDialogOpen = () => document.querySelector("dialog[open]") !== null;
+setInterval(() => {
+  if (!authoringPass && !uploadBusy && !openCardMenu && !anyDialogOpen()) renderCatalog(true);
+}, 10000);
+</script>
+
+<script>
+  (function () {
+    var h = document.querySelector(".site-header");
+    if (!h) return;
+    var onScroll = function () { h.classList.toggle("scrolled", window.scrollY > 10); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  })();
+</script>
+
+</body></html>

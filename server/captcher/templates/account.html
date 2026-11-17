@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Settings — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+__THEME_HEAD__
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<!-- font-preload: start the two faces every page paints in downloading
+     alongside fonts.css rather than after the browser has parsed it. Without
+     these the chain is HTML -> fonts.css -> woff2, three serial round trips
+     before a real glyph appears, and the page shows system sans until the
+     last one lands. DM Sans is the body; Outfit (one variable file) sets every heading above it.
+     export.py strips this block: the offline builds inline or relocate their
+     fonts, so these hrefs would be dead there. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  /* Layout only. The panels, fields, buttons and notices are the system's;
+     static/captcher.css draws them, including the .page frame. */
+  /* A panel is plain block flow inside; these are the only gaps it needs. */
+  .panel > p, .panel > .panel-sub { margin-bottom:var(--s4); max-width:62ch; }
+  .panel > .notice { margin:0 0 var(--s4); }
+  #err { margin:var(--s4) 0 0; }
+  #err[hidden] { display:none; }
+
+  /* Connected browsers. A list, not a table: two of the three fields are prose
+     and the third is a button, so a table would be one column of alignment
+     nobody reads and two of ragged text. */
+  .devices { list-style:none; margin:0 0 var(--s4); padding:0;
+             border-top:1px solid var(--border); }
+  .device { display:flex; align-items:center; justify-content:space-between;
+            gap:var(--s4); padding:var(--s3) 0;
+            border-bottom:1px solid var(--border); }
+  .device-id { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .device-id strong { overflow-wrap:anywhere; }
+  /* A revoked row goes quiet rather than vanishing — a list that reflows under
+     the pointer invites a second, unintended click on whatever lands there. */
+  .device[data-revoked] { opacity:.45; }
+  .device[data-revoked] .device-revoke { display:none; }
+  .devices { margin-bottom:0; }
+
+  /* Appearance. Three chips in a row, the same .chip the catalog's track
+     filter uses — a segmented control is what "one of these three" looks like
+     in this system, and a <select> for three short words would hide two of
+     them behind a click. */
+  .theme-pick { display:flex; gap:var(--s2); flex-wrap:wrap; margin-bottom:var(--s2); }
+
+  /* Settings: two columns of panels. */
+  .settings-sub { margin:var(--s2) 0 var(--s6); max-width:62ch; }
+  .settings { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--s6);
+              grid-auto-flow:row dense; align-items:start; }
+  @media (max-width: 1000px) {
+    .settings { grid-template-columns:minmax(0, 1fr); }
+  }
+
+  #theme-hint { margin:0; }
+</style></head><body>
+__TOOLBAR__
+<main class="page">
+  <h1>Settings</h1>
+  <p class="page-sub settings-sub">Everything this Captcher server keeps — walkthroughs,
+     captures and brand profiles — stays on the machine it runs on.</p>
+  <div class="settings">
+    <!-- Appearance is a preference, not an action: set once and then left
+         alone, which is why it is a row on this page rather than a permanent
+         button in a toolbar that is already five items wide. It is stored in
+         this browser only — see templates/_theme-head.html — so the copy says
+         so rather than implying it follows the account. -->
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">Appearance</h2></div>
+      <p class="panel-sub">Applies to Captcher's own pages, in this browser.
+         A walkthrough always plays in its own brand's colours.</p>
+      <div class="theme-pick" id="theme-pick" role="radiogroup" aria-label="Colour theme">
+        <button class="chip" type="button" role="radio" aria-checked="false"
+                data-theme="system" tabindex="-1">System</button>
+        <button class="chip" type="button" role="radio" aria-checked="false"
+                data-theme="light" tabindex="-1">Light</button>
+        <button class="chip" type="button" role="radio" aria-checked="false"
+                data-theme="dark" tabindex="-1">Dark</button>
+      </div>
+      <p class="field-hint" id="theme-hint"></p>
+    </section>
+    <!-- Last: connecting a browser is done from the extension's side panel,
+         so this panel only reports and revokes, and is visited rarely. -->
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">Connected browsers</h2></div>
+      <!-- Connecting is done FROM the extension, not from here: only the side
+           panel can see which tab is open and act on it, and having a second
+           button here would mean two places to try and one of them being wrong.
+           This page reports and revokes; the panel connects. -->
+      <p class="panel-sub">To connect a browser, open the <strong>Captcher Recorder</strong> side panel
+        there and press <strong>Connect this browser</strong>. Captcher hands the
+        extension its own key — there is nothing to copy. Revoke any browser here and
+        it stops uploading immediately.</p>
+
+      __DEVICES__
+      <div class="notice notice--error" id="err" hidden></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">AI</h2></div>
+      __AI_STATUS__
+      <a class="button button--secondary" href="/usage">AI spend</a>
+    </section>
+  </div>
+</main>
+<script>
+  /* Pairing itself is answered by /static/pair.js, loaded from the toolbar on
+     every signed-in page — this page has no part in it beyond being one such
+     page. What is left here is revoking. */
+  const err = document.getElementById("err");
+
+  /* ---- appearance ------------------------------------------------------ */
+  /* Resolving the theme, stamping <html> and persisting the choice all live in
+     templates/_theme-head.html, which every signed-in page carries. This is
+     only the one control that writes to it. Guarded on window.scTheme because
+     that script is what defines it: a page somehow served without the head
+     partial should show no control rather than a dead one. */
+  const themePick = document.getElementById("theme-pick");
+  if (themePick && window.scTheme) {
+    const hint = document.getElementById("theme-hint");
+    const chips = [...themePick.querySelectorAll("[data-theme]")];
+    const paintPick = () => {
+      const choice = window.scTheme.get();
+      for (const chip of chips) {
+        const on = chip.dataset.theme === choice;
+        chip.classList.toggle("is-active", on);
+        chip.setAttribute("aria-checked", String(on));
+        // One stop for the whole group, which is what a radiogroup is: Tab
+        // reaches it, arrows move inside it, Tab leaves it.
+        chip.tabIndex = on ? 0 : -1;
+      }
+      hint.textContent = choice === "system"
+        ? "Following this device's setting, and changing when it does."
+        : "Always " + choice + " here, whatever this device is set to.";
+    };
+    const choose = (chip) => { window.scTheme.set(chip.dataset.theme); paintPick(); };
+    themePick.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-theme]");
+      if (chip) choose(chip);
+    });
+    themePick.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+      if (!step) return;
+      event.preventDefault();
+      const at = chips.findIndex((c) => c.classList.contains("is-active"));
+      const next = chips[(at + step + chips.length) % chips.length];
+      choose(next);
+      next.focus();
+    });
+    paintPick();
+  }
+
+  /* ---- revoke ---------------------------------------------------------- */
+  document.getElementById("device-list")?.addEventListener("click", async (event) => {
+    const button = event.target.closest(".device-revoke");
+    if (!button) return;
+    const row = button.closest(".device");
+    button.disabled = true;
+    err.hidden = true;
+    try {
+      const r = await fetch("/api/extension/devices/" +
+                            encodeURIComponent(row.dataset.device), { method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ||
+        ("The server refused the request (" + r.status + ")."));
+      row.dataset.revoked = "1";
+    } catch (e) {
+      err.textContent = String(e.message || e); err.hidden = false;
+      button.disabled = false;
+    }
+  });
+
+</script>
+</body></html>

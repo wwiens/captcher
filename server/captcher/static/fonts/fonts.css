@@ -1,0 +1,20 @@
+/* Captcher: self-hosted DM Sans (interface) + Outfit (headlines); JetBrains Mono and
+   Sora retained for saved brand profiles that name them.
+   SIL OFL 1.1 licenses and exact upstream URLs/hashes: PROVENANCE.md.
+   Absolute local URLs are also replaced by data URLs in offline exports. */
+/* DM Sans is one variable file (opsz 9-40, wght 100-1000) declared once with a weight
+   range, so an offline export inlines it a single time. font-optical-sizing is auto. */
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 100 1000; font-display: swap; src: url('/static/fonts/dm-sans-latin.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/static/fonts/jetbrains-mono-latin-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/static/fonts/jetbrains-mono-latin-500.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('/static/fonts/jetbrains-mono-latin-700.woff2') format('woff2'); }
+/* Outfit is one variable file (wght 100-900) declared once with a weight range, like
+   DM Sans: the v2 headings sit at 600, which the old per-weight faces did not declare. */
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/static/fonts/outfit-latin-900.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 400; font-display: swap; src: url('/static/fonts/sora-latin-400.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 500; font-display: swap; src: url('/static/fonts/sora-latin-500.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 600; font-display: swap; src: url('/static/fonts/sora-latin-600.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 700; font-display: swap; src: url('/static/fonts/sora-latin-700.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 800; font-display: swap; src: url('/static/fonts/sora-latin-800.woff2') format('woff2'); }
+
+.tnum { font-variant-numeric: tabular-nums; }

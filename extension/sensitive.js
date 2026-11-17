@@ -1,0 +1,285 @@
+// Shared sensitive-control rules and capture-local redaction. No values leave
+// this isolated-world closure. SingleFile can read CLOSED shadow roots through
+// chrome.dom too, so our traversal must use the same API.
+(() => {
+  "use strict";
+  if (self.scSensitive) return;
+  const REDACTED = "********";
+  const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+  const SENSITIVE_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code|cc-[a-z-]+)(\s|$)/i;
+  // A "show password" button flips type=password to type=text, after which the
+  // field looks ordinary. Remember every element ever seen as a password (here,
+  // and through notePasswords() from the recorder's type-change observer), and
+  // fall back to the field's name/id for one that was re-rendered as text.
+  const wasPassword = new WeakSet();
+  const SECRET_NAME = /(^|[^a-z])(pass(word|wd|code|phrase)?|pwd|pin|otp|cvv|cvc|csc)([^a-z]|$)/i;
+  const namedSecret = (el) => SECRET_NAME.test(
+    `${el.getAttribute("name") || ""} ${el.id || ""}`.replace(/([a-z])([A-Z])/g, "$1_$2"));
+  const isSensitive = (el) => {
+    if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
+    if (el.tagName === "INPUT" && el.type === "password") { wasPassword.add(el); return true; }
+    return wasPassword.has(el) || (el.tagName === "INPUT" && el.type === "hidden") ||
+      SENSITIVE_AUTOCOMPLETE.test(el.getAttribute("autocomplete") || "") ||
+      (el.tagName === "INPUT" && namedSecret(el));
+  };
+  function notePasswords(root, records) {
+    if (root) for (const el of root.querySelectorAll('input[type="password" i]')) wasPassword.add(el);
+    for (const record of records || []) {
+      if (record.attributeName === "type" && /^password$/i.test(record.oldValue || "")) wasPassword.add(record.target);
+    }
+  }
+  // Another extension's inline UI is not the page. 1Password mounts its field
+  // button and fill menu (closed shadow roots, an extension-page iframe) as
+  // fields gain and lose focus, so any capture taken while it moved failed the
+  // stability check below. Matched on the element itself or any ancestor,
+  // across shadow boundaries.
+  const FOREIGN_TAG = /^com-1password-/i;
+  const FOREIGN_ID = /^1p-/;
+  const EXTENSION_URL = /^\s*(chrome|moz|safari-web)-extension:/i;
+  const foreignElement = (el) => FOREIGN_TAG.test(el.localName || "") || FOREIGN_ID.test(el.id || "") ||
+    (/^(IFRAME|FRAME)$/.test(el.tagName) && EXTENSION_URL.test(el.getAttribute("src") || ""));
+  const isForeignUi = (node) => {
+    for (let n = node; n; n = n.parentNode || n.host) {
+      if (n.nodeType === 1 && foreignElement(n)) return true;
+    }
+    return false;
+  };
+  const fail = (reason = "The page changed during protection. Reload it and retry.") => {
+    const error = new Error(`Sensitive-field protection could not be verified. ${reason}`);
+    error.name = "SensitiveProtectionError";
+    error.reason = reason;
+    throw error;
+  };
+  // Name what appeared, so "the page changed" says what changed. The usual
+  // culprit is another extension's button or panel, which is most often a
+  // custom element (a tag with a hyphen) hosting a shadow root. The outermost
+  // one is reported: that is the extension's mount point, not its innards.
+  const addedReason = (nodes) => {
+    for (const node of nodes) {
+      let tag = "";
+      let n = node.nodeType === 1 ? node : node.host || node.defaultView?.frameElement;
+      for (; n; n = n.parentNode || n.host) {
+        if (n.nodeType === 1 && n.localName.includes("-")) tag = n.localName;
+      }
+      tag = tag.replace(/[^a-z0-9._-]/gi, "").slice(0, 40);
+      if (tag) {
+        return `<${tag}> was added to the page while the step was being saved. If that belongs to a ` +
+          "browser extension, close it and retry, or record in a Chrome profile without other extensions.";
+      }
+    }
+    return undefined;
+  };
+  let held = null;
+
+  function inventory() {
+    const controls = [], roots = [], frames = [];
+    // Foreign UI is still searched for controls, so one there fails closed
+    // like anywhere else. Its roots and frames are just not tracked: they
+    // come and go with focus and hold none of the page's data.
+    const visit = (root, foreign = false) => {
+      if (!foreign) roots.push(root);
+      for (const el of root.querySelectorAll("*")) {
+        if (isSensitive(el)) controls.push(el);
+        const inner = foreign || foreignElement(el);
+        // Chrome's API accepts HTMLElement only; SVG/MathML icons throw.
+        // Namespace checks also work for same-origin child documents, where
+        // instanceof HTMLElement would use the wrong realm. Keep traversing
+        // HTML descendants of foreignObject and every open/closed HTML root.
+        const shadow = el.namespaceURI === HTML_NAMESPACE
+          ? chrome.dom.openOrClosedShadowRoot(el) : el.shadowRoot;
+        if (shadow) visit(shadow, inner);
+        if (el.tagName === "TEMPLATE") visit(el.content, foreign);
+        if (/^(IFRAME|FRAME)$/.test(el.tagName)) {
+          // Access from the top document proves that about:blank/srcdoc and
+          // same-origin children were inspected, including nested frames.
+          // Cross-origin and sandboxed frames are opaque: the engine runs in
+          // this document only, cannot reach them either, and captures them
+          // empty. Still tracked, so they are stability-checked and suppress
+          // the screenshot. But the engine parses an inaccessible frame's
+          // srcdoc itself, so inline content there must stay blocked.
+          const doc = el.contentDocument;
+          if (!inner) frames.push(el);
+          if (!doc) {
+            if (el.hasAttribute("srcdoc") || /^\s*data:/i.test(el.getAttribute("src") || "")) {
+              fail("An embedded frame cannot be inspected because its inline content is sandboxed. Try a page without sandboxed inline frames.");
+            }
+            continue;
+          }
+          if (doc.readyState !== "complete") fail("An embedded frame is still loading. Wait for it to finish and retry.");
+          visit(doc, inner);
+        }
+        if (/^(OBJECT|EMBED|FENCEDFRAME)$/.test(el.tagName)) fail("An embedded object cannot be inspected. Try a page without embedded objects.");
+      }
+    };
+    if (!chrome.dom?.openOrClosedShadowRoot) fail("Chrome's shadow-root inspection API is unavailable. Reload the extension and page.");
+    visit(document);
+    return { controls, roots, frames };
+  }
+  // Every recognized control is blanked in the DOM. Separately, scrub() hunts
+  // for reflections of the removed values elsewhere in the serialized page, and
+  // aborts on any reflected value too short to replace safely. That hunt only
+  // makes sense for values that are actually secret: hidden inputs mostly carry
+  // "1", "true", "patch" or a record ID, and card-expiry parts are "09" or
+  // "2028" — searching for those aborted ordinary pages ("page=1") or starred
+  // out unrelated text. So hidden inputs are hunted only when token-like, and
+  // select choices and expiry parts only when long enough to replace.
+  const tokenLike = (v) => v.length >= 12 && !/\s|:\/\//.test(v) &&
+    (v.length >= 20 || (/[A-Za-z]/.test(v) && /\d/.test(v)));
+  const lowSecrecy = (el) => el.tagName === "SELECT" || /(^|\s)cc-exp/i.test(el.getAttribute("autocomplete") || "");
+  const scrubRule = (el) => el.tagName === "INPUT" && el.type === "hidden" ? tokenLike
+    : lowSecrecy(el) ? (v) => v.length >= 4 : () => true;
+  const remember = (state, value, keep = () => true) => {
+    if (value && keep(String(value))) state.secrets.add(String(value));
+  };
+  const attribute = (state, el, name, replacement = "", keep = undefined) => {
+    const value = el.getAttribute(name);
+    if (value === null) return;
+    remember(state, value, keep);
+    state.undo.push(() => {
+      if (el.getAttribute(name) === replacement) el.setAttribute(name, value);
+    });
+    el.setAttribute(name, replacement);
+    state.checks.push(() => el.getAttribute(name) === replacement);
+  };
+  function redactAll(id) {
+    if (typeof id !== "string" || !id) fail();
+    if (held) { if (held.id !== id) fail(); return verify(id); }
+    const state = { id, undo: [], liveUndo: [], checks: [], secrets: new Set(), observers: [], invalid: false };
+    held = state;
+    // Install recovery BEFORE touching any field, including the failure path.
+    state.timer = setTimeout(() => restoreAll(id), 180000);
+    try {
+      state.inventory = inventory();
+      const { controls, roots, frames } = state.inventory;
+      state.known = new Set([...controls, ...roots, ...frames]);
+      for (const el of state.inventory.controls) {
+        const value = el.value;
+        const keep = scrubRule(el);
+        remember(state, value, keep);
+        if (el.tagName === "SELECT") {
+          const selected = [...el.options].map(option => option.selected);
+          state.liveUndo.push({ check: () => el.selectedIndex === -1,
+            restore: () => [...el.options].forEach((option, i) => { option.selected = selected[i]; }) });
+          for (const option of el.options) {
+            // The option list is public page structure; only the choice made
+            // is the user's data, so only chosen options are hunted for.
+            const chosen = option.selected ? keep : () => false;
+            attribute(state, option, "value", "", chosen);
+            attribute(state, option, "label", "", chosen);
+            attribute(state, option, "selected", "", () => false);
+            const text = option.textContent;
+            remember(state, text, chosen);
+            state.undo.push(() => { if (option.textContent === "") option.textContent = text; });
+            option.textContent = "";
+            state.checks.push(() => option.textContent === "");
+          }
+          el.selectedIndex = -1;
+          state.checks.push(() => el.selectedIndex === -1);
+        } else {
+          // Both live properties and default/serialized values can carry data.
+          attribute(state, el, "value", "", keep);
+          if (el.tagName === "TEXTAREA") {
+            const text = el.textContent;
+            remember(state, text, keep);
+            state.undo.push(() => { if (el.textContent === "") el.textContent = text; });
+            el.textContent = "";
+            state.checks.push(() => el.textContent === "");
+          }
+          state.liveUndo.push({ check: () => el.value === "", restore: () => { el.value = value; } });
+          el.value = "";
+          state.checks.push(() => el.value === "");
+        }
+      }
+      verify(id);
+      for (const root of state.inventory.roots) {
+        const observer = new MutationObserver(() => {
+          try { verify(id); } catch (error) { state.invalid = true; state.reason ??= error?.reason; }
+        });
+        observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+        state.observers.push(observer);
+      }
+      return verify(id);
+    } catch (error) { restoreAll(id); throw error; }
+  }
+  function verify(id) {
+    const state = held;
+    if (!state || state.id !== id) fail();
+    if (state.invalid) fail(state.reason);
+    const now = inventory();
+    // Removal is safe: whatever leaves the page cannot be serialized. Only
+    // something new, never blanked or observed, can carry a value out. A
+    // removed node that comes back is the same node, still blanked and still
+    // observed; a re-inserted frame gets a new document, so that is new.
+    const added = [...now.controls, ...now.roots, ...now.frames].filter(node => !state.known.has(node));
+    if (added.length || state.checks.some(check => !check())) {
+      state.invalid = true;
+      state.reason = addedReason(added);
+      fail(state.reason);
+    }
+    // No screenshot verdict any more: the panel always takes one. Every
+    // control found here is blank in the DOM before the shot is taken, and a
+    // password field paints as dots regardless. What a cross-origin frame
+    // shows is beyond reach — the pixels include it as it stands.
+    return { count: now.controls.length };
+  }
+  function restoreAll(id) {
+    if (!held || held.id !== id) return 0; // another capture cannot restore ours
+    const state = held;
+    held = null;
+    clearTimeout(state.timer);
+    for (const observer of state.observers) observer.disconnect();
+    // Attribute/default restoration precedes live values, which may differ.
+    // Avoid overwriting a value the application changed while capture ran.
+    const live = state.liveUndo.filter(entry => { try { return entry.check(); } catch { return false; } });
+    for (const undo of state.undo) { try { undo(); } catch { /* detached field */ } }
+    for (const entry of live) { try { entry.restore(); } catch { /* detached field */ } }
+    return state.inventory?.controls.length || 0;
+  }
+
+  // Defense against reflections of recognized field values. Decode embedded
+  // HTML before checking it, so a same-origin iframe's base64 snapshot is not
+  // an escape hatch. No arbitrary binary/image or unmarked-text detection is
+  // promised. Short reflected values abort rather than corrupting HTML syntax.
+  function scrub(html, id) {
+    verify(id);
+    let hits = 0;
+    const variants = new Set();
+    for (const value of held.secrets) {
+      variants.add(value);
+      variants.add(encodeURIComponent(value));
+      variants.add(JSON.stringify(value).slice(1, -1));
+      variants.add([...value].map(c => `&#${c.codePointAt(0)};`).join(""));
+      variants.add([...value].map(c => `&#x${c.codePointAt(0).toString(16)};`).join(""));
+      let escaped = value;
+      for (let i = 0; i < 4; i++) {
+        escaped = escaped.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        variants.add(escaped);
+      }
+    }
+    const ordered = [...variants].filter(Boolean).sort((a, b) => b.length - a.length);
+    function clean(text, depth = 0) {
+      if (depth > 12) fail();
+      text = text.replace(/data:text\/html(?:;charset=[\w-]+)?;base64,([A-Za-z0-9+/]+=*)/gi, (uri, encoded) => {
+        const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        const safe = clean(decoded, depth + 1);
+        if (safe === decoded) return uri;
+        const output = new TextEncoder().encode(safe);
+        let binary = "";
+        for (let i = 0; i < output.length; i += 8192) binary += String.fromCharCode(...output.subarray(i, i + 8192));
+        return uri.slice(0, uri.indexOf(",") + 1) + btoa(binary);
+      });
+      for (const value of ordered) {
+        if (!text.includes(value)) continue;
+        if (value.length < 4) fail("A protected field's value is too short to remove safely because the same characters appear elsewhere on the page. Clear the field or use a longer test value, then retry.");
+        const parts = text.split(value);
+        hits += parts.length - 1;
+        text = parts.join(REDACTED);
+      }
+      return text;
+    }
+    return { html: clean(String(html)), hits };
+  }
+  self.scSensitive = { REDACTED, isSensitive, isForeignUi, notePasswords, redactAll, restoreAll, verify, scrub };
+})();

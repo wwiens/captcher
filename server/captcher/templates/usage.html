@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>AI spend — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+__THEME_HEAD__
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  .usage-period { display:flex; gap:var(--s2); flex-wrap:wrap; margin-bottom:var(--s5); }
+  .admin-summary { display:flex; gap:var(--s3); flex-wrap:wrap; margin-bottom:var(--s6); }
+  .admin-summary .panel { min-width:160px; padding:var(--s4); }
+  .admin-summary strong { display:block; font-family:var(--font-display); font-weight:var(--weight-heading);
+                         font-size:28px; letter-spacing:-.03em; color:var(--text); font-variant-numeric:tabular-nums; }
+  .usage-sections { display:flex; flex-direction:column; gap:var(--s5); }
+  .table-wrap { overflow-x:auto; }
+  .admin-table { width:100%; border-collapse:collapse; }
+  .admin-table th { color:var(--muted); font-family:var(--font-sans); font-weight:var(--weight-medium);
+                    font-size:var(--type-label); letter-spacing:var(--track-label);
+                    text-align:left; text-transform:uppercase; white-space:nowrap; }
+  .admin-table th, .admin-table td { border-bottom:1px solid var(--border);
+                                     padding:var(--s3); vertical-align:middle; }
+  .admin-table th:first-child, .admin-table td:first-child { padding-left:0; }
+  .admin-table th:last-child, .admin-table td:last-child { padding-right:0; }
+  .admin-table .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .admin-table td.num:last-child { font-weight:var(--weight-medium); color:var(--text); }
+  .usage-models { display:block; margin-top:2px; }
+  .usage-empty { padding:var(--s4) 0; }
+  @media (max-width:760px) {
+    .admin-table .wide { display:none; }
+  }
+</style></head><body>
+__TOOLBAR__
+<main class="page">
+  <div class="page-head">
+    <p class="label"><a href="/account">Settings</a> / AI</p>
+    <h1>AI spend</h1>
+    <p class="page-sub">What the Claude API calls cost, estimated from each call's token usage at list
+      prices as of __PRICES_AS_OF__. The Anthropic Console bill is authoritative.</p>
+  </div>
+  <nav class="usage-period" aria-label="Period">__PERIODS__</nav>
+  __NOTICE__
+  <div class="admin-summary" aria-label="Spend summary">
+    <div class="panel"><span class="label">Estimated spend</span><strong>__TOTAL_COST__</strong></div>
+    <div class="panel"><span class="label">API calls</span><strong>__TOTAL_CALLS__</strong></div>
+    <div class="panel"><span class="label">Per authoring pass</span><strong>__PER_AUTHOR__</strong></div>
+    <div class="panel"><span class="label">Per AI edit</span><strong>__PER_EDIT__</strong></div>
+  </div>
+  <div class="usage-sections">
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">By operation</h2></div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Operation</th><th class="num">Runs</th><th class="num">Calls</th>
+            <th class="num">Per run</th><th class="num wide">Input</th><th class="num wide">Cache read</th>
+            <th class="num wide">Cache write</th><th class="num wide">Output</th><th class="num">Cost</th></tr></thead>
+          <tbody>__BY_OPERATION__</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">By walkthrough</h2></div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Walkthrough</th><th class="num">Runs</th><th class="num">Calls</th>
+            <th class="num">Cost</th></tr></thead>
+          <tbody>__BY_WALKTHROUGH__</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">By model</h2></div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Model</th><th class="num">Calls</th><th class="num wide">Input</th>
+            <th class="num wide">Cache read</th><th class="num wide">Cache write</th>
+            <th class="num wide">Output</th><th class="num">Cost</th></tr></thead>
+          <tbody>__BY_MODEL__</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">By day</h2></div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Day (UTC)</th><th class="num">Calls</th><th class="num">Cost</th></tr></thead>
+          <tbody>__BY_DAY__</tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+</body></html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Walkthroughs — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+__THEME_HEAD__
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<!-- font-preload: start the two faces every page paints in downloading
+     alongside fonts.css rather than after the browser has parsed it. Without
+     these the chain is HTML -> fonts.css -> woff2, three serial round trips
+     before a real glyph appears, and the page shows system sans until the
+     last one lands. DM Sans is the body; Outfit (one variable file) sets every heading above it.
+     export.py strips this block: the offline builds inline or relocate their
+     fonts, so these hrefs would be dead there. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  /* Page-local CSS is layout only. Every colour, border weight, radius and
+     type size on this page comes from static/captcher.css — including the
+     .page frame, so there is nothing to restate here.
+
+     One content column, full width. This used to be a 1.35fr/1fr split with
+     the authoring queue alone in the right lane, which meant ~40% of a desktop
+     viewport was blank whenever the queue was empty — the steady state — while
+     the library was squeezed into the remaining 55%. The queue is transient
+     and urgent, so it is a strip across the top when it has anything in it and
+     costs nothing when it does not; the library gets the whole width and lays
+     its cards out in a grid (see .cards in _catalog-script.html).
+
+     The head is one row: title and counts left, the primary action right. It
+     wraps to two rows below 640px. */
+  .cat-head { display:flex; align-items:flex-end; justify-content:space-between;
+          gap:var(--s4); flex-wrap:wrap; margin-bottom:var(--s6); }
+  .cat-head .page-head { margin-bottom:0; gap:var(--s1); }
+  .cat-head .cat-actions { display:flex; gap:var(--s2); flex:none; }
+</style></head><body>
+__TOOLBAR__
+<main class="page">
+<div class="cat-head">
+  <div class="page-head">
+    <h1>Walkthroughs</h1>
+    <!-- The counts replace the tagline that used to sit here. This is the
+         working surface, not a landing page: what a returning author needs at
+         the top is the shape of their library, not the brand line. -->
+    <p class="page-sub small" id="cat-counts"></p>
+  </div>
+  <div class="cat-actions">
+    <!-- No record button: recording starts only from the extension's side
+         panel, which is the one surface that can see and drive the tab. -->
+    <button class="button button--secondary" type="button" id="lib-new">New collection</button>
+  </div>
+</div>
+<!-- A pass in flight. Rendered only while one is running, and above the
+     queue rather than inside it: what this used to be was one line of status
+     text welded under one queued card, which is legible if you are already
+     looking at that card and invisible from anywhere else on the page — for a
+     job that runs for minutes. renderAuthoringBanner() in _catalog-script.html
+     owns it. -->
+<section id="authoring-now"></section>
+<!-- The authoring queue: a full-width strip above the shelf, rendered only
+     when something is waiting. Filtering never touches it — see the note in
+     _catalog-script.html. -->
+<section id="queue"></section>
+<!-- The filter bar sits OUTSIDE #cards on purpose: renderCatalog() wipes
+     that element on every 10s poll, so a control built inside it would
+     lose focus and whatever was half-typed. Its layout lives in
+     _catalog-script.html with the rest of the library; the controls
+     themselves are the system's .input, .select and .chip. -->
+<div class="lib-bar" id="lib-bar" hidden>
+  <div class="lib-controls">
+    <input class="input" type="search" id="lib-q" autocomplete="off" spellcheck="false"
+           placeholder="Search walkthroughs" aria-label="Search walkthroughs">
+    <select class="select" id="lib-sort" aria-label="Sort walkthroughs"
+            title="Collections keep the order you filed them in. This sorts everything else.">
+      <option value="authored">Newest</option>
+      <option value="title">Title A&ndash;Z</option>
+      <option value="steps">Most steps</option>
+      <option value="minutes">Longest first</option>
+    </select>
+  </div>
+  <!-- Tracks are few and stable, so they are chips rather than a select: the
+       whole set is visible without opening anything, and the active one reads
+       as a selected state. Rebuilt only when the distinct set changes. -->
+  <div class="lib-tracks" id="lib-tracks" hidden role="group" aria-label="Filter by track"></div>
+  <div class="lib-status" id="lib-status" hidden>
+    <span class="label" id="lib-count"></span>
+    <button class="button button--ghost button--sm" type="button" id="lib-clear">Clear</button>
+  </div>
+</div>
+__CARDS__
+__EXTENSION_PANEL__
+</main>
+__CATALOG_SCRIPT__
+__TOOLBAR_SCRIPT__
+</body></html>

@@ -1,0 +1,136 @@
+/* Signed-out pages: split screen, UI v2.
+   Form on Paper at the left; a calm, inset, rounded Indigo panel at the right
+   carrying only the mark and one message — no decorative squares. These pages
+   carry no Appearance preference (nobody has one before signing in), so they
+   are always the light palette. Loaded only by the six signed-out templates. */
+.auth-simple {
+  --background: var(--paper);
+  color-scheme: light;
+  margin: 0;
+  min-height: 100vh;
+}
+.auth-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.auth-side {
+  display: flex; flex-direction: column;
+  padding: 28px clamp(24px, 6vw, 80px);
+  background: var(--paper);
+  min-width: 0;
+}
+.auth-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.auth-top .brand-word { font-size: 22px; }
+.auth-main {
+  flex: 1; width: 100%; max-width: 420px; margin: 0 auto;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 48px 0;
+}
+.auth-card { width: 100%; }
+/* UI v2: no second mark above the heading — the lockup at the top and the
+   panel already carry the logo. */
+.auth-simple h1 {
+  font-family: var(--font-display); font-weight: var(--weight-heading);
+  font-size: 34px; line-height: 1.15; letter-spacing: -.02em;
+  margin: 0 0 8px;
+}
+.auth-intro { color: var(--muted); font-size: 15px; margin: 0 0 28px; }
+.auth-beta { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 20px; }
+.auth-main > .auth-beta { margin: 24px 0 0; text-align: center; }
+.auth-beta a { text-decoration: underline; }
+
+/* Sign in / Create account: two links styled as a pill segmented control.
+   They navigate between the existing routes; nothing toggles in place. */
+.auth-switch {
+  display: grid; grid-template-columns: 1fr 1fr;
+  background: var(--mist); border-radius: var(--radius-pill); padding: 4px;
+  margin: 0 0 28px;
+}
+.auth-switch a {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 42px; border-radius: var(--radius-pill);
+  font-size: 14px; font-weight: var(--weight-semibold);
+  color: var(--slate); text-decoration: none;
+}
+.auth-switch a:hover { color: var(--ink); text-decoration: none; }
+.auth-switch a[aria-current="page"] {
+  background: var(--white); color: var(--ink);
+  box-shadow: 0 1px 2px rgba(20, 21, 26, .08), 0 0 0 1px rgba(20, 21, 26, .04);
+}
+
+.auth-simple .field { gap: 8px; margin-bottom: 18px; }
+.field-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.auth-forgot { font-size: 13px; font-weight: var(--weight-medium); }
+.auth-simple .input { min-height: 50px; font-size: 15px; background: var(--white); }
+.auth-simple .button--lg { min-height: 52px; margin-top: 8px; }
+.auth-simple .button--primary:hover { background: var(--ink); border-color: var(--ink); }
+.auth-simple .notice { margin-bottom: 18px; }
+.auth-simple .notice + .button, .auth-simple .notice + .field { margin-top: 0; }
+.auth-alt { text-align: center; color: var(--muted); font-size: 14px; margin: 20px 0 0; }
+.auth-alt a { font-weight: var(--weight-semibold); }
+.auth-foot {
+  display: flex; justify-content: space-between; gap: 16px;
+  font-size: 13px; color: var(--muted);
+}
+
+/* Brand panel: an inset, rounded Indigo card with a soft glow, the white-frame
+   mark at a modest size, and one message. */
+.auth-panel {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 48px;
+  margin: 16px 16px 16px 0;
+  padding: clamp(32px, 4.5vw, 56px);
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(41, 182, 255, .34) 0%, rgba(41, 182, 255, 0) 55%),
+    radial-gradient(90% 70% at 0% 100%, rgba(62, 207, 162, .20) 0%, rgba(62, 207, 162, 0) 60%),
+    var(--indigo);
+  color: var(--white);
+  min-height: 600px;
+}
+/* The mark's stepping squares, spread into a halftone from the top-right
+   corner and shrinking away before the copy; a few keep the mark's colours.
+   static/auth-pattern.svg is plain rects on a 40px grid. Decoration only. */
+.auth-panel::before {
+  content: ""; position: absolute; top: 0; right: 0;
+  width: min(720px, 100%); aspect-ratio: 1;
+  background: url("auth-pattern.svg") top right / contain no-repeat;
+  pointer-events: none;
+}
+.auth-panel-mark {
+  position: relative; display: block; flex: none;
+  width: 56px; aspect-ratio: 1;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 526 526'%3E%3Cpath fill='%23fff' d='M230 0h296v50H230zM476 0h50v270h-50zM0 256h50v270H0zM0 476h296v50H0z'/%3E%3Cpath fill='%23FF6A5C' d='M0 0h72v72H0z'/%3E%3Cpath fill='%2329B6FF' d='M92 92h90v90H92z'/%3E%3Cpath fill='%23fff' d='M202 202h122v122H202z'/%3E%3Cpath fill='%233ECFA2' d='M344 344h90v90h-90z'/%3E%3Cpath fill='%23FF6A5C' d='M454 454h72v72h-72z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.auth-panel-body { position: relative; max-width: 520px; }
+.auth-panel-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 999px;
+  padding: 8px 14px 8px 12px; margin-bottom: 28px;
+  font-size: 13px; font-weight: var(--weight-medium);
+}
+.auth-panel-title {
+  font-family: var(--font-display); font-weight: var(--weight-heading);
+  font-size: clamp(34px, 4vw, 56px); line-height: 1.08; letter-spacing: -.025em;
+  color: var(--white); margin: 0 0 20px;
+}
+.auth-panel-title span { font-weight: var(--weight-regular); color: rgba(255, 255, 255, .88); }
+.auth-panel-copy { font-size: 17px; line-height: 1.55; color: rgba(255, 255, 255, .92); margin: 0; max-width: 46ch; }
+
+/* Focus on the Paper side keeps the Indigo ring; on the panel, white. */
+.auth-panel :focus-visible { outline-color: var(--white); }
+
+@media (max-width: 900px) {
+  .auth-layout { grid-template-columns: minmax(0, 1fr); }
+  .auth-panel { display: none; }
+  .auth-side { min-height: 100vh; }
+}
+@media (max-width: 480px) {
+  .auth-side { padding: 20px 20px 24px; }
+  .auth-main { padding: 32px 0; }
+  .auth-simple h1 { font-size: 30px; }
+  .auth-foot { flex-direction: column; gap: 4px; }
+}

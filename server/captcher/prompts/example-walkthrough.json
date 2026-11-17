@@ -1,0 +1,114 @@
+{
+  "schema": "walkthrough-def@1",
+  "id": "suspend-a-member",
+  "title": "Suspend a Member Account",
+  "track": "customer-support",
+  "level": "snippet",
+  "estimated_minutes": 3,
+  "intro": {
+    "scenario": "The fraud team has flagged unusual activity on Sandra Whitfield's account. Until their review is complete, her account must be suspended so no points can be earned, redeemed, or adjusted. You'll locate her account and suspend it with the correct reason code.",
+    "objectives": [
+      "Locate a member account from the member list",
+      "Start a suspension from the member profile",
+      "Choose the correct suspension reason code and document the case",
+      "Verify the account shows as suspended"
+    ]
+  },
+  "steps": [
+    {
+      "id": "open-profile",
+      "title": "Open the member's profile",
+      "page": "step-000/page.html",
+      "instruction": "Sandra Whitfield is the flagged member. Find her in the member list and click her row to open her profile.",
+      "showme_caption": "We start in Member Lookup. Sandra Whitfield is the flagged member — clicking anywhere on her row opens her profile.",
+      "hint": "Look for the row with Sandra Whitfield (M-100241) and click it.",
+      "action": {
+        "type": "click",
+        "target": {
+          "selector": "tr.clickable",
+          "text": "Sandra Whitfield"
+        }
+      }
+    },
+    {
+      "id": "start-suspension",
+      "title": "Start the suspension",
+      "page": "step-001/page.html",
+      "instruction": "You're on Sandra's profile — note her status is currently Active. Click the Suspend button to begin the suspension.",
+      "showme_caption": "From the profile header we can see her status is Active. The Suspend button opens the suspension dialog.",
+      "hint": "The Suspend button is in the top-right of the profile, between Edit contact info and Adjust points.",
+      "action": {
+        "type": "click",
+        "target": {
+          "selector": "button",
+          "text_exact": "Suspend"
+        }
+      }
+    },
+    {
+      "id": "choose-reason",
+      "title": "Choose the reason code",
+      "page": "step-002/page.html",
+      "instruction": "Every suspension needs a reason code. This case came from the fraud team, so open the Reason code dropdown and choose FRAUD_REVIEW.",
+      "showme_caption": "Every suspension is logged with a reason code. This is a fraud-team referral, so we select FRAUD_REVIEW — Suspected fraud, under review.",
+      "hint": "Open the Reason code dropdown inside the dialog and pick FRAUD_REVIEW — Suspected fraud — under review.",
+      "action": {
+        "type": "select",
+        "target": {
+          "selector": ".modal select"
+        },
+        "value": "FRAUD_REVIEW",
+        "wrong_value_feedback": "That reason code doesn't match this case — the fraud team flagged this account. Pick the fraud-related code."
+      }
+    },
+    {
+      "id": "add-note",
+      "title": "Document the case",
+      "page": null,
+      "instruction": "Add a short case note so the next agent has context: say why the account is suspended and who flagged it. Type a note, then click elsewhere or pause to continue.",
+      "showme_caption": "A case note gives the next agent context without them having to dig. Reference the flag and who requested it.",
+      "hint": "Click into the Case note box and type a short note (a few words is enough).",
+      "action": {
+        "type": "input",
+        "target": {
+          "selector": ".modal textarea"
+        },
+        "min_length": 4,
+        "demo_value": "Unusual activity — fraud team review"
+      }
+    },
+    {
+      "id": "confirm-suspend",
+      "title": "Confirm the suspension",
+      "page": null,
+      "instruction": "Everything is set: reason code chosen, case documented. Click Suspend account to apply the suspension.",
+      "showme_caption": "With the reason and note in place, Suspend account applies the change immediately. Note the warning: earning, redemptions and adjustments are all blocked while suspended.",
+      "hint": "Click the red Suspend account button at the bottom of the dialog.",
+      "action": {
+        "type": "click",
+        "target": {
+          "selector": ".modal .btn-danger",
+          "text": "Suspend account"
+        }
+      }
+    },
+    {
+      "id": "verify",
+      "title": "Verify the result",
+      "page": "step-003/page.html",
+      "instruction": "Confirm the suspension took effect: the status chip now reads Suspended, the red banner shows your reason code and note, and the Suspend button has become Reactivate account. When you've verified all three, finish the lesson.",
+      "showme_caption": "Three confirmations: the status chip is now Suspended, the banner records the reason and note for every future agent, and the action button has flipped to Reactivate account.",
+      "action": {
+        "type": "observe"
+      }
+    }
+  ],
+  "completion": {
+    "summary": "You suspended a member account the right way: located the member, used the correct reason code for a fraud referral, documented the case, and verified the account state.",
+    "success_criteria": [
+      "Account status changed from Active to Suspended",
+      "Reason code FRAUD_REVIEW recorded in the suspension banner",
+      "Case note visible for the next agent"
+    ]
+  }
+}

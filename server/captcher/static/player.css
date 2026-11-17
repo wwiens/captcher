@@ -1,0 +1,928 @@
+/* Captcher player — Captcher identity.  The "classic" player: a 48px top
+   bar, a 300px step panel and the captured screen between them. This file is
+   also the EDIT surface and the EXPORT base (export.py inlines it verbatim).
+
+   It deliberately does NOT link /static/captcher.css: an export has to be
+   one self-contained file, and it has to render in an air-gapped LMS.
+   captcher.css is the reference for every value below — copy from it,
+   never link it.
+
+   Captcher (Brand Guide v1): a light Mist surround, white surfaces, Ink type.
+   Indigo is You try and the primary action; Sky is Show me and "look here".
+   Keep the recorded product's own pixels untouched. Show me uses an outlined
+   control; You try uses a filled control. Success remains a separate green.
+
+   Variable names in :root are white-label SLOTS, not colour names:
+   export.apply_branding() maps a customer's brand profile straight onto them
+   (see its token_map). Never rename one without changing that map. */
+:root {
+  /* ---- the ten white-label slots -------------------------------------
+     These defaults are branding.DEFAULT_BRANDING["colors"] spelled as CSS.
+     If one moves there, move it here in the same commit: an unbranded export
+     and the "captcher" brand profile have to be the same file. */
+  --primary: #3B49C6;           /* Indigo — You try, active controls */
+  --primary-hover: #2F3BA8;
+  --accent: #0A6FA8;            /* Sky (deep) — Show me, attention */
+  --bg: #F2F3F7;                /* Mist */
+  --surface: #FFFFFF;           /* the first surface step                    */
+  --border: #E6E7EC;            /* hairline; depth is surfaces + 1px, never
+                                   a shadow                                  */
+  --text: #14151A;
+  --muted: #6B6F7B;
+  --success: #0B7A5A;           /* green — NEVER derived from the accent:    */
+  --error: #B83227;             /* the accent means "look here" and success
+                                   means "you were right". Sharing a hue
+                                   would cost the spotlight its meaning.     */
+
+  /* ---- also written by export.apply_branding() ------------------------ */
+  /* Eyebrows are read, so they take a hue that carries text on --bg. Every
+     spectrum hue does (they are built at one lightness for exactly this), so
+     this defaults to --primary rather than naming a second colour. Kept as a
+     slot because export.py and templates/branding.html rely on the shape. */
+  --accent-text: #0A6FA8;
+  /* Soft tints. export._soft() derives them 86% toward WHITE, which is a
+     light-theme move — on this ground they would be near-white blocks. The
+     flat design fills nothing with them (a message is a 3px left rule and a
+     line of prose), so the wrong value is currently harmless, and these
+     defaults are the spectrum's line tints instead: each hue darkened until
+     it works as a rule on base. Named trade-off: if anything ever paints with
+     a soft tint, export._soft() has to learn the ground it is landing on. */
+  --accent-soft: #DDEBF3;
+  --success-soft: #DDECE8;
+  --error-soft: #F5E2E1;
+  /* Outfit for everything a person wrote; JetBrains Mono for everything the
+     system knows rather than says. The split is semantic, not stylistic. */
+  --font-head: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-body: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- platform-only, all derived from the slots above ----------------
+     None of these is a brand-profile key. A customer never sets them.
+
+     Each is declared TWICE on purpose. The first line is a literal from the
+     Spectrum palette, which is what an old browser keeps; the second mixes the
+     same value out of the slots above, which is what a current one uses. The
+     mix exists because these neutrals used to be safe constants only while the
+     platform and every brand profile shared one polarity. They do not any
+     more: dark is home here, and a customer whose --bg is white would get
+     #CACAC6 prose on it at 1.4:1. Deriving each neutral as a step FROM one
+     slot TOWARD another makes it follow whichever polarity the profile
+     chose — and a browser too old for color-mix() falls back to values that
+     are correct for the unbranded default, which is the export that has to
+     work everywhere.
+
+     --on-primary needs no fallback pair: it is text on a hue fill, and the
+     brand's own --bg is the right answer in either polarity. It is also what
+     templates/branding.html's live preview uses, so the two agree. */
+  --text-soft: #3C3D42;         /* instruction prose on --bg */
+  --text-soft: color-mix(in srgb, var(--text) 82%, var(--bg));
+  --surface-2: #F3F3F4;         /* the raised step — hover wash, selected row */
+  --surface-2: color-mix(in srgb, var(--surface) 95%, var(--text));
+  --on-primary: var(--bg);      /* the only text colour allowed on --primary */
+  --border-strong: #D1D2D7;     /* the unticked ○, and a control's hover edge */
+  --border-strong: color-mix(in srgb, var(--border) 90%, var(--text));
+  --border-dashed: #D1D2D7;
+  --border-dashed: color-mix(in srgb, var(--border) 90%, var(--text));
+  --disabled-bg: transparent;   /* disabled is a hairline and muted text,
+                                   never a fill                             */
+  --disabled-text: #B1B4BB;
+  --disabled-text: color-mix(in srgb, var(--muted) 48%, var(--bg));
+  --modal-border: #D1D2D7;      /* a dialog separates by a scrim and a
+                                   hairline, so this border does the work a
+                                   shadow used to                           */
+  --modal-border: color-mix(in srgb, var(--border) 90%, var(--text));
+  /* The stage — the surround around the captured page. It tracks --bg so a
+     customer's own background carries through. By default it is Mist, one step
+     below the white capture, with a hairline doing the separating. */
+  --stage: var(--bg);
+  /* One soft shadow, for surfaces that float (dialogs, the popup step card,
+     the AI panel) — on a light ground a hairline alone does not lift them.
+     Platform-owned, never a profile key: export.py's branded CSS and both
+     players refer to it by name. */
+  --shadow-modal: 0 24px 60px rgba(20, 21, 26, .18), 0 2px 6px rgba(20, 21, 26, .06);
+  /* Focus is a 2px solid lead outline at 2px offset, on every interactive
+     element, always visible — learners are keyboard-driven more often than
+     authors expect. An outline, not a shadow. */
+  --focus-color: var(--primary);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  --radius-control: 12px;       /* UI v2: soft, rounded controls             */
+  --radius-container: 18px;     /* and rounder containers                    */
+  --radius-pill: 999px;         /* mode switch, chips, progress tracks       */
+  --hit-player: 44px;           /* a learner's hit target, not the app's 36  */
+
+  /* Fast and unshowy. Colour, border-colour and opacity transition; position
+     and scale do not. No bounce, no spring. --dur-step is the travelling
+     cursor in Show me, the one piece of motion the brand owns. */
+  --ease-settle: cubic-bezier(.2, 0, .2, 1);
+  --ease-travel: cubic-bezier(.2, 0, .2, 1);
+  --ease-exit: cubic-bezier(.2, 0, .2, 1);
+  --dur-control: 140ms;
+  --dur-cross: 140ms;
+  --dur-enter: 140ms;
+  --dur-step: 420ms;
+
+  /* The spotlight's outer hairline. It separates the ring from a captured page
+     whose colour we do not control: near-black outside the ring on a light
+     page, near-white on a dark one. There is no glow layer any more, so
+     --spot-rgb is gone with it — the ring is a solid 2px outline in the hue,
+     exactly as the design system's TargetHighlight draws it. */
+  --spot-hairline: #14151A;
+
+  /* Yellow is the hint, and only the hint. It is platform-only: a customer
+     cannot theme it, because "the system is offering help" has to mean the
+     same thing in every branded export. */
+  --hint: #29B6FF;
+  --hint-line: #0A6FA8;
+
+  /* Anything floating OVER the captured page takes the same two-tone edge as
+     the spotlight. The step content in this player is a docked side panel, so
+     it never had the problem, and AI assist now docks there too; nothing here
+     floats today. Kept in both players so the two cannot drift. */
+  --pop-hairline: #14151A;
+}
+
+/* A dark captured page. The near-black outer hairline vanishes into it, so
+   both edges flip to the light side of the palette. */
+body.sc-dark-capture { --pop-hairline: #F4F5F8; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Show me degrades to a slideshow rather than being disabled: the cuts stay,
+     the travel goes. */
+  :root { --dur-control: 0ms; --dur-cross: 0ms; --dur-enter: 0ms; --dur-step: 0ms; }
+}
+
+/* Opacity only. Position and scale do not transition anywhere in this system:
+   a dialog that slides reads as a different surface arriving, and this one is
+   the same surface becoming visible. */
+@keyframes sc-settle { from { opacity: 0; } to { opacity: 1; } }
+/* The hint's breathe. Opacity, never brightness or scale: a hue is assigned
+   here, and brightening it walks it off the spectrum. */
+@keyframes sc-pulse  { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+/* There is no second face for display: Outfit's weight and its tight tracking
+   do that work. Sentence case throughout — Title Case appears nowhere. */
+h1 { font-family: var(--font-head); font-weight: 600; font-size: 24px;
+  line-height: 1.15; letter-spacing: -.035em; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; line-height: 1.3; letter-spacing: -.03em; }
+.hidden { display: none !important; }
+:focus-visible { outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset); }
+::selection { background: var(--primary); color: var(--on-primary); }
+
+/* Countable things — step counts, progress, durations — take DM Sans with
+   tabular figures (Brand Guide v1). Mono is kept only for text that really
+   is machine output: CSS selectors and the AI panel's technical lines. */
+.step-eyebrow, .obj-label, .ps-group-label, .ed-field, .ed-sec, .ai-ctx-step, .ai-head, .eyebrow, #tb-progress {
+  font-family: var(--font-body); font-variant-numeric: tabular-nums;
+}
+.mono, .ai-sel-where {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- buttons -- */
+/* Nothing scales or lifts on press. Hover darkens; secondaries take a
+   --surface-2 wash. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--hit-player); padding: 11px 18px;
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  line-height: 1.25; white-space: nowrap; text-decoration: none;
+  cursor: pointer; background: transparent; color: var(--text);
+  border: 1px solid transparent; border-radius: var(--radius-control);
+  transition: background var(--dur-control) var(--ease-settle),
+              border-color var(--dur-control) var(--ease-settle);
+}
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+/* Hover on an outlined control takes the border and the text to the lead.
+   The background stays put: nothing lifts, nothing scales. */
+.btn-secondary { background: transparent; border-color: var(--border-strong); color: var(--text); }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+/* Disabled is muted text on a hairline, no fill. Exempt from the contrast
+   floor: it is telling the learner this control is not for them yet. */
+.btn:disabled, .btn[disabled] { background: var(--disabled-bg); border-color: var(--border);
+  color: var(--disabled-text); cursor: not-allowed; }
+.btn:disabled:hover, .btn[disabled]:hover { background: var(--disabled-bg); border-color: var(--border); }
+/* The authoring rail runs at the app's 36px; only the learner's controls take
+   the player's 44px (see .panel-actions below). */
+.btn-sm { min-height: 36px; padding: 7px 13px; font-size: 13px; }
+
+/* ------------------------------------------------------------------ mark -- */
+/* The Captcher mark: four frame bars and five stepping squares (Brand Guide
+   v1). The frame is masked currentColor so it follows the chrome; the squares
+   keep their brand colours on every ground and are never recoloured, whatever
+   the profile. Chrome only. Same drawing as .brand-mark in captcher.css. */
+.brand-mark {
+  --mark-size: 22px;
+  position: relative; flex: none;
+  width: var(--mark-size); height: var(--mark-size);
+}
+.brand-mark::before, .brand-mark::after { content: ""; position: absolute; inset: 0; }
+.brand-mark::before {
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 526 526'%3E%3Cpath d='M230 0h296v50H230zM476 0h50v270h-50zM0 256h50v270H0zM0 476h296v50H0z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 526 526'%3E%3Cpath d='M230 0h296v50H230zM476 0h50v270h-50zM0 256h50v270H0zM0 476h296v50H0z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.brand-mark::after {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 526 526'%3E%3Cpath fill='%23FF6A5C' d='M0 0h72v72H0z'/%3E%3Cpath fill='%2329B6FF' d='M92 92h90v90H92z'/%3E%3Cpath fill='%233B49C6' d='M202 202h122v122H202z'/%3E%3Cpath fill='%233ECFA2' d='M344 344h90v90h-90z'/%3E%3Cpath fill='%23FF6A5C' d='M454 454h72v72h-72z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.brand { display: inline-flex; align-items: center; gap: 12px; color: var(--text); }
+.brand-word { font-family: var(--font-head); font-weight: 900; font-size: 21px;
+  line-height: 1; letter-spacing: -.03em; }
+/* export.apply_branding() swaps a customer logo in by replacing the <svg> it
+   finds inside .intro-brand / .tb-left .brand with <img class="brand-logo">.
+   The mark is CSS boxes now, so .brand-logo-slot is that hook: a zero-size,
+   never-painted <svg> whose only job is to be replaced. When it is, the CSS
+   mark stands down and the customer's logo is the lockup. */
+.brand-logo-slot { display: none; }
+.brand:has(.brand-logo) .brand-mark { display: none; }
+
+/* ----------------------------------------------------------- step panel -- */
+/* The aperture notch is gone with the old direction: Spectrum has no signature
+   corner detail, and a decorative tick would be the one thing on this view not
+   carrying meaning. What a returning user recognises now is the surface step
+   and its hairline — the same construction as every other panel in the
+   product. No gradient here either; the fill is flat. */
+.panel {
+  background-color: var(--surface);
+}
+
+/* ------------------------------------------------------------- spotlight -- */
+/* THE SIGNATURE. Always drawn OUTSIDE the target's box, never baked into a
+   capture: a 2px solid ring in the state hue with a 1px hairline outside it.
+   That is the whole construction — no shoulder, no falloff, no glow. The
+   design system's TargetHighlight draws it exactly this way, and the reason is
+   the one that removed every other shadow: a blurred edge makes an ASSIGNED
+   colour look like decoration, and this is the most load-bearing colour in the
+   product. It marks the control without covering it.
+
+   Legibility on an unknown page comes from the TWO-TONE EDGE — the hue over a
+   near-black hairline on a light capture, both flipped on a dark one. The
+   CONSTRUCTION is the signature, not the hue: a customer's own accent has to
+   read as the same instrument.
+
+   Error and success retune the hue and drop the breathe. Only "look here" is
+   an invitation, so only the hint pulses — and it pulses on opacity, because
+   brightening an assigned hue walks it off the spectrum.
+
+   WHERE IT ACTUALLY RUNS: the ring lands on elements INSIDE the captured page,
+   so at runtime it is written by static/bridge.js (classes .br-hint and
+   .br-success, applied when the player sends {cmd:"hint"} / {cmd:"probe"}).
+   bridge.js carries a hand-copied duplicate of these values because it is
+   injected into a separate, network-frozen document and can neither link a
+   stylesheet nor read a custom property from here. Change one, change both. */
+.spotlight {
+  box-shadow:
+    0 0 0 1px var(--spot-hairline),
+    0 0 0 3px var(--mode-hue);
+  border-radius: 0;             /* it sits against a captured screen */
+  /* Opacity, not brightness: the hue must stay the hue it was assigned. */
+  animation: sc-pulse 2.4s ease-in-out infinite;
+  transition: box-shadow var(--dur-cross) var(--ease-settle);
+}
+.spotlight--error   { animation: none; box-shadow:
+    0 0 0 1px var(--spot-hairline), 0 0 0 3px var(--error); }
+.spotlight--success { animation: none; box-shadow:
+    0 0 0 1px var(--spot-hairline), 0 0 0 3px var(--success); }
+/* A dark captured page. Only the outer hairline flips — the ring keeps its
+   assigned hue, because the spectrum is built at one lightness precisely so a
+   hue needs no light and dark variants. Inventing a second sky here would
+   mean the mode hue and the ring hue were no longer the same colour. */
+.spotlight--dark { --spot-hairline: #F4F5F8; }
+@media (prefers-reduced-motion: reduce) { .spotlight { animation: none; } }
+
+/* ------------------------------------------------------- intro / complete -- */
+#complete { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 30px; }
+/* The card is the view's one modal: --surface, one hairline, and the scrim
+   behind it. No shadow — separation is the scrim's job. Radius 0. */
+.intro-card { background: var(--surface); border: 1px solid var(--modal-border);
+  box-shadow: var(--shadow-modal); border-radius: var(--radius-container);
+  padding: 36px 40px; max-width: 620px; }
+.intro-brand { margin-bottom: 24px; color: var(--text); }
+.intro-brand .brand-mark { --mark-size: 24px; }
+.intro-brand .brand-word { font-size: 23px; }
+/* The track label. Mono caps in --accent-text, which defaults to --primary:
+   it is read, so it takes a hue that carries text. */
+.eyebrow { font-size: 10px; font-weight: 400; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent-text); margin-bottom: 10px; }
+.intro-card h1 { margin-bottom: 12px; }
+.scenario { font-size: 15px; line-height: 1.6; color: var(--text-soft); margin-bottom: 22px; }
+.objectives { background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-container); padding: 16px 20px; margin-bottom: 22px; }
+.obj-label { font-size: 10px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--muted); margin-bottom: 8px; }
+.objectives ul { margin-left: 18px; }
+.objectives li { padding: 3px 0; line-height: 1.55; font-size: 14px; }
+.intro-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+/* the two ways in sit together; leaving sits apart */
+#intro-close { margin-left: auto; }
+
+/* Status is an 8px dot, never a glyph and never an emoji. This is the
+   completion dot: 12px because it is the only status on the view and has
+   nothing beside it to size against. */
+.big-check { width: 12px; height: 12px; border-radius: 50%; background: var(--success);
+  margin-bottom: 14px; }
+.complete-stats { font-size: 13px; color: var(--muted); margin-bottom: 22px; }
+.tagline { font-size: 12px; color: var(--muted); margin-top: 20px; }
+
+/* ---------------------------------------------------------------- chrome -- */
+#player { display: flex; flex-direction: column; height: 100vh; }
+/* A 48px bar on --surface under a single 1px hairline — a surface step above
+   --bg, not a filled plate. Depth is a step plus a border, and the captured
+   screen has to be the brightest thing in the frame. */
+.topbar { background: var(--surface); color: var(--text);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 0 16px; height: 48px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border); }
+.tb-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+/* export.apply_branding() injects `.tb-left .brand{color:var(--bg)}` — written
+   back when this bar was a filled plate and the lockup had to go light. The
+   bar is a surface step now, so that colour would erase the mark against it;
+   this outranks it on specificity while leaving the selector's meaning (the
+   lockup in the top bar) exactly as export.py expects it. */
+.topbar .tb-left .brand { color: var(--text); }
+.tb-left .brand-mark { --mark-size: 16px; }
+.tb-left .brand-word { font-size: 17px; }
+.tb-divider { width: 1px; height: 20px; background: var(--border); flex: none; }
+.tb-walkthrough { color: var(--text); font-weight: 600; font-size: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tb-right { display: flex; align-items: center; gap: 14px; flex: none; }
+/* The step readout. Countable, therefore mono caps. */
+#tb-progress { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; }
+
+/* THE MODE SWITCH — the product's central control, and the place the hue
+   contract is set. The mode is something the system knows rather than says, so
+   it is mono caps; the selected half is FILLED with its own hue and lettered
+   in --on-primary, so a learner can read the mode across the room without
+   reading the word. Show me is sky (--accent), You try is indigo
+   (--primary) — the same two slots a customer's brand profile writes, so a
+   white-label player keeps the contrast between the modes even when it does
+   not keep the hues. */
+.tb-mode { display: flex; flex: none; gap: 6px; }
+.mode-btn { background: none; border: 1px solid var(--border);
+  color: var(--muted);
+  font: inherit; font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3; padding: 6px 12px; cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: background var(--dur-control) var(--ease-settle),
+              border-color var(--dur-control) var(--ease-settle),
+              color var(--dur-control) var(--ease-settle); }
+#mode-show:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+#mode-try:hover:not(.active)  { border-color: var(--primary); color: var(--primary); }
+#mode-show.active { background: var(--surface); border-color: var(--accent);
+                    color: var(--text); }
+#mode-try.active  { background: var(--primary); border-color: var(--primary);
+                    color: var(--on-primary); }
+
+/* The mode hue, read by everything that has to agree with the switch: the step
+   eyebrow, the progress fill and the spotlight ring. Declared on :root as the
+   You try default because a walkthrough opens in You try, and overridden on
+   <body> by syncModeButtons(). */
+:root { --mode-hue: var(--primary); }
+body.mode-showme { --mode-hue: var(--accent); }
+body.mode-youtry { --mode-hue: var(--primary); }
+
+/* A 2px track in --border, filled in the CURRENT MODE'S hue: progress moves
+   to sky in Show me and back to indigo in You try, along with the eyebrow
+   and the spotlight. Steps, never a percentage — there is no score here. */
+.progress-track { width: 96px; height: 4px; background: var(--border); flex: none; overflow: hidden;
+  border-radius: var(--radius-pill); }
+.progress-fill { height: 100%; background: var(--mode-hue); width: 0;
+  transition: width var(--dur-enter) linear; }
+
+/* Icon controls in the bar. No fill and no border — the 44px box is hit area,
+   not weight, and the negative margins close the row's 14px gap back up so the
+   boxes touch and the glyphs still sit on the bar's 16px gutter. ✕ is one of
+   the four glyphs the system allows. */
+.tb-home, .tb-gear { background: none; border: none; color: var(--muted);
+  cursor: pointer; text-decoration: none; flex: none;
+  width: var(--hit-player); height: var(--hit-player); margin: 0 -7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-control);
+  transition: background var(--dur-control) var(--ease-settle),
+              color var(--dur-control) var(--ease-settle); }
+.tb-home { font-size: 15px; line-height: 1; margin-right: -9px; }
+.tb-home:hover, .tb-gear:hover { color: var(--text); background: var(--surface-2); }
+
+/* ------------------------------------------------------------ step panel -- */
+.body { display: flex; flex: 1; min-height: 0; }
+/* --surface, 1px --border, radius 0, 20px gutters, 14px between rows. */
+.panel { width: 300px; flex-shrink: 0; border-left: 1px solid var(--border);
+  padding: 20px 0 16px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; }
+/* Only the step list runs full-bleed — its rows are bands. The rest of the rail
+   keeps the 20px gutter. */
+.panel > *:not(.step-list) { margin-left: 20px; margin-right: 20px; }
+/* STEP 03 / 07 — countable, so mono caps, and coloured by the mode so the
+   learner knows whether they are watching or driving before reading a word. */
+.step-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--mode-hue); }
+.panel h2 { font-size: 17px; font-weight: 600; letter-spacing: -.03em; line-height: 1.3; }
+.panel p { font-size: 14px; line-height: 1.6; color: var(--text-soft); }
+/* Messages are a softly tinted, rounded line of prose (UI v2), never a box with
+   an icon. A wrong choice gets a REASON written for that step, never the word
+   "incorrect" — the copy rule is what the shape is here to enforce. */
+.feedback { font-size: 13px; line-height: 1.55; color: var(--text-soft);
+  background: color-mix(in srgb, var(--border) 45%, transparent);
+  border-radius: var(--radius-control); padding: 10px 12px; }
+.feedback.hint { background: color-mix(in srgb, var(--hint) 12%, var(--surface)); color: var(--text-soft); }
+.feedback.good { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success); }
+.feedback.bad  { background: color-mix(in srgb, var(--error) 9%, var(--surface));   color: var(--error); }
+/* The learner's controls run at the player's 44px, not the app's 36px. */
+.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; min-height: var(--hit-player); }
+.panel-actions .btn, .panel-actions .ghost-btn { min-height: var(--hit-player); }
+
+/* countdown state: steady width for the ticking numbers, and a settle rather
+   than a throb — motion never bounces. */
+.btn.counting { font-family: var(--font-body); font-variant-numeric: tabular-nums;
+  animation: count-pulse 1.6s var(--ease-settle) infinite; }
+@keyframes count-pulse { 50% { opacity: .82; } }
+
+/* replay — quiet, on its own line right under the primary actions. Tertiary:
+   transparent, a 1px --border edge and muted lettering. */
+.replay-row { min-height: 26px; }
+.ghost-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 36px; padding: 7px 13px; cursor: pointer;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  font-family: var(--font-body); font-size: 13px; font-weight: 500; line-height: 1.25;
+  transition: background var(--dur-control) var(--ease-settle); }
+.ghost-btn:hover { color: var(--text); background: var(--surface-2); }
+
+/* The rail. Counters are mono; the current row is a filled chip on the raised
+   band — a fill is how "selected" is said everywhere in this system, and it
+   costs no hue. */
+.step-list { margin-top: auto; padding-top: 14px; list-style: none; counter-reset: s;
+  border-top: 1px solid var(--border); }
+.step-list li { counter-increment: s; display: flex; align-items: center; gap: 12px;
+  padding: 9px 20px; font-size: 13px; line-height: 1.45; color: var(--text-soft); }
+.step-list li::before { content: counter(s); width: 20px; height: 20px;
+  border-radius: var(--radius-container); background: transparent;
+  border: 1px solid var(--border); color: var(--muted);
+  font-family: var(--font-body); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.step-list li.done { color: var(--muted); }
+.step-list li.done::before { content: "\2713"; background: transparent;
+  border-color: var(--success); color: var(--success); }
+.step-list li.current { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.step-list li.current::before { background: var(--text); border-color: var(--text);
+  color: var(--bg); font-weight: 500; }
+
+/* ----------------------------------------------------------------- stage -- */
+/* The surround stays a neutral, slightly sunk ground so it cannot read as part
+   of the customer's real product. */
+.stage { flex: 1; background: var(--stage); padding: 16px; min-width: 0;
+  display: flex; align-items: center; justify-content: center; }
+/* Literal white, never var(--surface): brand governs chrome only, and a
+   white-label surface colour must not bleed into the captured page. Radius 0 —
+   this is the frame around a captured screen. */
+#sim-wrap { position: relative; width: 100%; height: 100%; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-container);
+  background: #fff; flex: none; }
+#sim { width: 100%; height: 100%; border: none; background: #fff; display: block; }
+/* windowed playback: the iframe is laid out at the captured viewport width
+ * and full document height (so the page can never scroll internally), then
+ * translated/scaled so the capture window fills the wrap. The transition
+ * turns region<->full-page switches into an animated pan/zoom. */
+#sim.windowed { position: absolute; top: 0; left: 0; transform-origin: 0 0;
+  transition: transform .55s var(--ease-travel), width .55s, height .55s; }
+/* Selected, not active: --text, not a hue. A hue here would compete with the
+   spotlight, and the spotlight is the only thing on this view saying
+   "look here". */
+#btn-window.windowed-off { color: var(--text); }
+
+/* --------------------------------------------------------------- modals --- */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(20, 21, 26, .55); z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal-card { background: var(--surface); border: 1px solid var(--modal-border);
+  box-shadow: var(--shadow-modal); border-radius: var(--radius-container);
+  padding: 20px 24px 10px; width: 420px; max-width: 100%;
+  animation: sc-settle var(--dur-enter) var(--ease-settle); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+/* The one display title in this view. */
+.modal-head h2 { font-family: var(--font-head); font-weight: 400; font-size: 24px;
+  line-height: 1.15; letter-spacing: 0; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 15px; line-height: 1; width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-control);
+  transition: background var(--dur-control) var(--ease-settle); }
+.modal-close:hover { color: var(--text); background: var(--surface-2); }
+.modal-sub { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+
+/* intro popup: the same .intro-card content, sized and closable as a modal.
+ * In short host frames (including the landing-page examples), keep the card
+ * inside the viewport and let its contents scroll so the launch controls can
+ * never be clipped below the frame. */
+.modal-intro { position: relative; width: 620px; padding: 32px 36px 26px;
+  max-height: calc(100vh - 48px); overflow-y: auto; }
+.intro-modal-close { position: absolute; top: 14px; right: 14px; }
+
+/* settings — a tidy list of label/control rows */
+.play-settings { display: flex; flex-direction: column; font-size: 13.5px; }
+.ps-row { display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  padding: 13px 0; cursor: pointer; }
+.ps-row + .ps-row { border-top: 1px solid var(--border); }
+.ps-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ps-label { font-weight: 600; color: var(--text); white-space: nowrap; }
+.ps-desc { font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.5; }
+.ps-row select { font: inherit; font-family: var(--font-body); font-size: 13px;
+  font-weight: 500; color: var(--text); padding: 7px 9px;
+  border-radius: var(--radius-control); border: 1px solid var(--border);
+  background: var(--bg); cursor: pointer; min-width: 80px; min-height: 36px;
+  text-align: center; flex-shrink: 0; }
+.ps-row select:hover { border-color: var(--border-strong); }
+.ps-row input[type="checkbox"] { accent-color: var(--primary); width: 17px; height: 17px;
+  margin-right: 2px; cursor: pointer; flex-shrink: 0; }
+.ps-row.dimmed { opacity: .45; }
+/* Walkthrough-owned settings, separated from the viewer preferences above so
+ * it is obvious which ones are not just yours. The label says where the choice
+ * lands — saved onto the walkthrough while editing, session-only otherwise. */
+.ps-group { border-top: 1px solid var(--border); margin-top: 4px; }
+.ps-group-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); padding: 13px 0 2px; }
+
+/* ---------------------------------------------------- editor (edit mode) -- */
+.panel.editing #panel-title, .panel.editing #panel-instruction,
+.panel.editing #panel-feedback, .panel.editing #play-actions,
+.panel.editing .replay-row { display: none; }
+#editor { display: flex; flex-direction: column; gap: 10px; }
+/* Field labels are mono caps: machine labels for a slot, not prose. */
+.ed-field { display: block; font-size: 10px; font-weight: 400; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted); }
+.ed-field input, .ed-field textarea, .ed-field select {
+  display: block; width: 100%; margin-top: 5px; font-family: var(--font-body);
+  font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0;
+  color: var(--text); padding: 9px 10px; line-height: 1.55;
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--bg); resize: vertical; min-height: 36px; }
+.ed-field textarea { overflow: hidden; }  /* auto-grown to content, no inner scroll */
+.ed-field input:hover, .ed-field textarea:hover, .ed-field select:hover { border-color: var(--border-strong); }
+/* The focus ring is identical on every control in the system — and it is NOT
+   the spotlight. The spotlight means "the learner should look here"; borrowing
+   it for a text field in the editor would spend that meaning. */
+.ed-field input:focus, .ed-field textarea:focus, .ed-field select:focus {
+  outline: none; background: var(--surface); border-color: var(--text);
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset); }
+.ed-note { font-family: var(--font-body); font-weight: 400; text-transform: none;
+  letter-spacing: 0; font-size: 11px; }
+/* A control, not a text field: sentence case and normal weight, so it does not
+ * read as one more labelled input in the stack above it. */
+.ed-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px;
+  line-height: 1.45; color: var(--text); cursor: pointer; }
+.ed-check input { flex: 0 0 auto; margin: 1px 0 0; accent-color: var(--primary); cursor: pointer; }
+.ed-check:has(input:disabled) { color: var(--muted); cursor: default; }
+.ed-check input:disabled { cursor: default; }
+.ed-sec { font-size: 10px; font-weight: 400; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; }
+#ed-action { display: flex; flex-direction: column; gap: 10px; }
+/* navigate (pager + play) vs commit (save/revert) are distinct groups */
+.ed-nav { display: flex; align-items: center; gap: 8px; }
+.ed-pager { flex: 0 0 auto; padding: 7px 12px; font-size: 13px; line-height: 1; }
+.ed-play { flex: 1; }
+.ed-play:disabled { cursor: default; }
+.ed-divider { border-top: 1px solid var(--border); margin: 4px 0; }
+.ed-commit { display: flex; align-items: center; gap: 14px; }
+/* Unsaved work is said with the primary fill, not with the accent — the two
+   accents in this view are already spent on progress and the hint rule. */
+#ed-save.dirty { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+#ed-save.dirty:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.ed-revert-link { background: none; border: none; padding: 4px; cursor: pointer;
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+  color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.ed-revert-link:hover { color: var(--text); }
+#ed-status { transition: opacity .45s var(--ease-settle); }
+.panel.editing .step-list li { cursor: pointer; }
+.panel.editing .step-list li:hover:not(.current) { background: var(--surface-2); }
+
+/* ------------------------------------------------ AI assist (edit mode) --- */
+/* AI assist is the rail's second tab, not a floating window. It floated for a
+ * while — centred, draggable, resizable — and wherever it sat it covered some
+ * of the captured page, which is exactly what an author pointing at elements
+ * needs to see. In the rail it never covers the capture, and the step it is
+ * about is named right above the conversation.
+ *
+ * Hue budget: Sky is the AI's hue (Brand Guide: "Show me, AI features,
+ * progress") and appears here only as a live dot, a spinner and the answer
+ * label. Pointing is the author's own tool and takes Indigo, the same hue
+ * bridge.js outlines the element with inside the page. Success keeps its own
+ * green: "changed" is not "look here". */
+
+/* The rail widens a little in edit mode: a conversation at 260px of measure
+ * wraps every other word. The page reloads on entering edit mode anyway, so
+ * the reflow lands where nobody is looking. */
+.panel.editing { width: 340px; }
+
+/* ---- the Step | AI assist switch: a segmented control (UI v2) ---- */
+.rail-tabs { display: none; }
+.panel.editing .rail-tabs { display: flex; gap: 2px; padding: 3px; flex-shrink: 0;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-pill); }
+.rail-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-pill);
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-family: var(--font-body); font-size: 13px; font-weight: 500; line-height: 1;
+  transition: background var(--dur-control) var(--ease-settle), color var(--dur-control) var(--ease-settle); }
+.rail-tab:hover { color: var(--text); }
+/* Selected is a fill, the way this system always says it — no hue. */
+.rail-tab.active { background: var(--surface); color: var(--text);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(20, 21, 26, .06); }
+/* A request still running while the Step tab is open. The tab's own words
+ * carry the meaning; the dot only says "live". */
+.rail-tab-dot { display: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--hint); flex-shrink: 0; }
+.rail-tabs.ai-running .rail-tab-dot { display: inline-block; animation: sc-pulse 1.6s ease-in-out infinite; }
+
+/* ---- the Step tab while a request runs: locked, and saying why ---- */
+#editor[inert] > :not(.ed-ai-lock) { opacity: .5; }
+.ed-ai-lock { font-size: 12.5px; }
+
+/* ---- the rail with AI assist open ----
+ * The conversation needs the full height and its own scroll, so the rail
+ * stops scrolling as a whole and hands the space to the panel. */
+.panel.ai-on { gap: 0; padding-bottom: 0; overflow: hidden; }
+.panel.ai-on #panel-step-num, .panel.ai-on #editor, .panel.ai-on .step-list { display: none; }
+.panel.ai-on .rail-tabs { margin-bottom: 14px; }
+.panel > .ai-panel { margin: 0; }
+.ai-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ai-panel.hidden { display: none; }
+
+/* What "this step" means: a pager, the step's number and its title. */
+.ai-context { display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  padding: 0 14px 12px; border-bottom: 1px solid var(--border); }
+.ai-ctx-nav { flex: none; width: 30px; height: 30px; display: inline-flex;
+  align-items: center; justify-content: center; border: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background var(--dur-control) var(--ease-settle), color var(--dur-control) var(--ease-settle); }
+.ai-ctx-nav:hover { background: var(--surface-2); color: var(--text); }
+.ai-ctx-text { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 1px; text-align: center; }
+.ai-ctx-step { font-size: 10px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); font-variant-numeric: tabular-nums; }
+.ai-ctx-title { max-width: 100%; font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- the conversation ---- */
+.ai-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 18px; padding: 18px 18px 14px; }
+
+/* Paragraphs in here are the panel's own, not the step text the rail's
+ * `.panel p` rule is written for — every <p> class below is scoped under
+ * .ai-panel so it outranks that rule. */
+
+/* The empty state teaches the three moves, once, and gets out of the way. */
+.ai-empty { margin: auto 0; padding: 4px 2px 12px; }
+.ai-panel .ai-empty-lead { font-family: var(--font-head); font-size: 16px; font-weight: 600;
+  line-height: 1.35; letter-spacing: -.02em; color: var(--text); text-wrap: balance;
+  margin-bottom: 16px; }
+.ai-empty-steps { list-style: none; display: flex; flex-direction: column; gap: 11px; }
+.ai-empty-steps li { display: flex; align-items: flex-start; gap: 11px;
+  font-size: 12.5px; line-height: 1.45; color: var(--text-soft); }
+.ai-empty-steps strong { color: var(--text); font-weight: 600; }
+.ai-empty-num { flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid var(--border-strong); color: var(--muted);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center; margin-top: -1px; }
+
+.ai-turn { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* The author's words: a filled bubble on the right, with what they were
+ * looking at underneath — the step, and the element if they pointed at one. */
+.ai-turn--you { align-items: flex-end; gap: 5px; }
+.ai-bubble { max-width: 90%; padding: 9px 13px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 16px 16px 6px 16px;
+  font-size: 13px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-you-ctx { display: flex; align-items: center; gap: 8px; max-width: 90%;
+  font-size: 11px; color: var(--muted); }
+.ai-you-el { display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+  color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-icon { display: inline-flex; flex: none; }
+
+/* The AI's side runs the full width with no bubble: it is read, not chatted
+ * with. A small label says what kind of turn it is — word plus dot, never the
+ * dot alone. */
+.ai-head { display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); }
+.ai-time { margin-left: auto; font-size: 11px; letter-spacing: 0; text-transform: none;
+  font-variant-numeric: tabular-nums; }
+.ai-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--border-strong); }
+.ai-dot--live { background: var(--hint); animation: sc-pulse 1.6s ease-in-out infinite; }
+.ai-dot--edit { background: var(--success); }
+.ai-dot--answer { background: var(--hint); }
+.ai-dot--error { background: var(--error); }
+.is-edit .ai-head-label { color: var(--success); }
+.is-answer .ai-head-label { color: var(--accent); }
+.is-error .ai-head-label { color: var(--error); }
+
+.ai-panel .ai-prose { font-size: 13.5px; line-height: 1.6; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-panel .ai-meta { font-size: 12px; color: var(--muted); }
+.ai-mini-label { font-size: 10px; font-weight: 500; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+/* Running: the one framed turn, tinted with the AI's hue so the live one is
+ * easy to find in a long thread. The current move is the big line; the last
+ * few before it sit under it, quieter. */
+.ai-turn--ai.is-running { padding: 12px 14px 13px; border-radius: var(--radius-container);
+  background: color-mix(in srgb, var(--hint) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--hint) 28%, var(--border)); }
+.ai-now { display: flex; align-items: flex-start; gap: 9px;
+  font-size: 13.5px; font-weight: 500; line-height: 1.45; color: var(--text); }
+.ai-now .ai-spinner { margin-top: 3px; flex: none; }
+.ai-now-text { min-width: 0; overflow-wrap: anywhere; }
+.ai-panel .ai-run-note { font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.ai-panel .ai-run-note:empty { display: none; }
+
+.ai-activity { list-style: none; display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; line-height: 1.45; color: var(--muted); }
+.ai-activity:empty { display: none; }
+.ai-activity li { display: flex; align-items: baseline; gap: 9px; overflow-wrap: anywhere; }
+.ai-activity li::before { content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--border-strong); transform: translate(4px, -2px); margin-right: 4px; }
+
+.ai-spinner { display: inline-block; width: 12px; height: 12px; vertical-align: -2px;
+  border: 1.5px solid color-mix(in srgb, var(--hint) 30%, var(--border));
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: ai-spin .8s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ai-spinner { animation-duration: 2.4s; }
+  .ai-dot--live, .rail-tabs.ai-running .rail-tab-dot, .ai-pulse { animation: none; }
+}
+
+/* The steps an edit touched, as buttons that go there. This is how the
+ * author checks the work: one click per change, then Play step. */
+.ai-steps { display: flex; flex-direction: column; }
+.ai-step-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-step-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+  min-height: 30px; padding: 3px 11px 3px 4px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--text);
+  transition: border-color var(--dur-control) var(--ease-settle), color var(--dur-control) var(--ease-settle); }
+.ai-step-chip:hover { border-color: var(--primary); color: var(--primary); }
+.ai-step-n { flex: none; min-width: 22px; height: 22px; padding: 0 5px; border-radius: var(--radius-pill);
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-soft);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center; }
+.ai-step-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tinted, rounded notices with no stripe (UI v2). */
+.ai-warns { padding: 10px 12px; border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--border) 45%, transparent); }
+.ai-panel .ai-warn { font-size: 12px; line-height: 1.5; color: var(--text-soft); overflow-wrap: anywhere; }
+.ai-panel .ai-warn + .ai-warn { margin-top: 5px; }
+
+.ai-suggestion { padding: 12px 13px; border-radius: 14px; background: var(--bg);
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.ai-suggestion .ai-mini-label { margin-bottom: -4px; }
+.ai-panel .ai-suggestion-text { font-size: 13px; line-height: 1.5; color: var(--text); }
+.ai-suggestion-go { min-height: 32px; padding: 5px 13px; font-size: 12.5px; }
+
+.ai-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+.ai-actions:empty { display: none; }
+.ai-link { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer;
+  background: none; border: 0; font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+  color: var(--text-soft); text-decoration: underline; text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px; transition: color var(--dur-control) var(--ease-settle); }
+.ai-link:hover { color: var(--text); text-decoration-color: currentColor; }
+.ai-link:disabled { color: var(--disabled-text); cursor: default; text-decoration-color: var(--border); }
+.ai-undone { font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); padding: 2px 8px; border-radius: var(--radius-pill); background: var(--bg); }
+.ai-turn.is-undone .ai-prose, .ai-turn.is-undone .ai-step-chips { opacity: .55; }
+
+/* How it got there, folded away once it is done. */
+.ai-trail summary { display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  list-style: none; font-size: 12px; color: var(--muted); }
+.ai-trail summary::-webkit-details-marker { display: none; }
+.ai-trail summary:hover { color: var(--text); }
+.ai-trail summary .ai-icon { transition: transform var(--dur-control) var(--ease-settle); }
+.ai-trail[open] summary .ai-icon { transform: rotate(90deg); }
+.ai-trail .ai-activity, .ai-trail .ai-warns { margin-top: 8px; }
+
+/* Things the panel says itself (undo done, not sent): centred between rules. */
+.ai-sys { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted);
+  text-align: center; }
+.ai-sys::before, .ai-sys::after { content: ""; flex: 1 1 16px; min-width: 16px; border-top: 1px solid var(--border); }
+.ai-sys > span { flex: 0 1 auto; }
+.ai-sys.bad { color: var(--error); }
+
+/* ---- the dock: suggestions, the composer, and one line of reassurance ---- */
+.ai-dock { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 14px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.ai-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-suggest:empty { display: none; }
+.ai-suggest-chip { max-width: 100%; padding: 6px 11px; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-family: var(--font-body); font-size: 12px; line-height: 1.35; color: var(--text-soft);
+  transition: border-color var(--dur-control) var(--ease-settle), color var(--dur-control) var(--ease-settle); }
+.ai-suggest-chip:hover { border-color: var(--primary); color: var(--primary); }
+
+/* One bordered box holding the selection, the text and the tools, so the
+ * element and the words about it read as one message. The focus ring goes on
+ * the box, not the bare textarea inside it. */
+.ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-container);
+  transition: border-color var(--dur-control) var(--ease-settle); }
+.ai-composer:hover { border-color: color-mix(in srgb, var(--border-strong) 60%, var(--text)); }
+.ai-composer:has(#ai-instruction:focus) { border-color: var(--text);
+  outline: var(--focus-width) solid var(--focus-color); outline-offset: 1px; }
+#ai-instruction { display: block; width: 100%; min-height: 44px; max-height: 200px;
+  padding: 4px 6px; border: 0; background: transparent; resize: none; overflow-y: auto;
+  font-family: var(--font-body); font-size: 13.5px; line-height: 1.5; color: var(--text); }
+#ai-instruction:focus { outline: none; }
+#ai-instruction::placeholder { color: var(--muted); }
+
+.ai-compose-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-send-group { display: inline-flex; align-items: center; gap: 10px; }
+.ai-send { min-height: 32px; padding: 5px 15px; }
+.ai-kbd { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Point: a pill tool in the composer's corner. Pressed while armed. */
+.ai-tool { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px 0 10px;
+  cursor: pointer; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 500; color: var(--text-soft);
+  transition: border-color var(--dur-control) var(--ease-settle), color var(--dur-control) var(--ease-settle),
+              background var(--dur-control) var(--ease-settle); }
+.ai-tool:hover { border-color: var(--primary); color: var(--primary); }
+.ai-tool.picking { border-color: var(--primary); color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+
+/* Armed: say what to do, in the hue the page's hover outline uses. */
+.ai-pick-banner { display: flex; align-items: center; gap: 9px; padding: 8px 11px;
+  border-radius: var(--radius-control); background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  color: var(--primary); font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.ai-pick-banner .ai-kbd { margin-left: auto; padding: 1px 6px; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); color: var(--primary); }
+.ai-pulse { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+  animation: sc-pulse 1.6s ease-in-out infinite; }
+
+/* The pointed-at element, as a chip: its words and what kind of thing it is.
+ * The selector is machine detail, folded behind a click. */
+.ai-chip { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border)); }
+.ai-chip.hidden { display: none; }
+.ai-chip-main { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 4px 6px 10px;
+  cursor: pointer; background: none; border: 0; text-align: left;
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 500; color: var(--primary); }
+.ai-chip-icon { flex: none; }
+.ai-chip-label { min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-chip-kind { flex: none; color: var(--muted); font-weight: 400; }
+.ai-chip-clear { width: 28px; height: 28px; margin-right: 3px; display: inline-flex;
+  align-items: center; justify-content: center; border: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); cursor: pointer; }
+.ai-chip-clear:hover { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--text); }
+/* Pointed at on another step's page: still sent, but not outlined anywhere. */
+.ai-chip.elsewhere { background: var(--bg); border-color: var(--border); }
+.ai-chip.elsewhere .ai-chip-main { color: var(--muted); }
+.ai-chip-details { grid-column: 1 / -1; padding: 0 10px 8px; }
+.ai-chip-details.hidden { display: none; }
+/* a selector is a machine string, so it is mono */
+.ai-sel-where { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5;
+  color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-sel-warn { grid-column: 1 / -1; padding: 0 10px 8px; font-size: 11.5px; line-height: 1.45; color: var(--error); }
+.ai-sel-warn.hidden { display: none; }
+
+.ai-panel .ai-scope-note { font-size: 11px; line-height: 1.4; color: var(--muted); text-align: center; }
+
+/* The rail's record of what the last AI edit touched — a word on a fill. */
+.step-list li.ai-changed::after { content: "changed"; margin-left: auto; flex: none;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success);
+  font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+
+/* ===== standalone export (body.sc-embedded, set by player.js) =====
+ * Exported walkthroughs are playback-only and have no server: hide
+ * catalog navigation. */
+body.sc-embedded .tb-home,
+body.sc-embedded #intro-close,
+body.sc-embedded .intro-modal-close,
+body.sc-embedded #btn-back-catalog { display: none; }
+
+/* ===== viewport-only embed chrome (body.sc-viewport-only, set by player.js
+ * when the export was built with chrome:"viewport") =====
+ * Strips the whole player UI — top bar, progress bar, step panel, tagline —
+ * so only the captured region shows, edge-to-edge in its host iframe, kept
+ * legible with the same slight border #sim-wrap always has. The player
+ * loops its "Show me" demo continuously in this mode (see finishWalkthrough
+ * in player.js) since there's no chrome left to show a completion card in. */
+body.sc-viewport-only { background: transparent; }
+body.sc-viewport-only .topbar,
+body.sc-viewport-only .progress-track,
+body.sc-viewport-only .panel,
+body.sc-viewport-only .tagline,
+body.sc-viewport-only #btn-window { display: none; }
+body.sc-viewport-only .stage { background: transparent; padding: 0; }
+body.sc-viewport-only #sim-wrap { box-shadow: none; }
+

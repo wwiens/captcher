@@ -1,0 +1,83 @@
+<style>
+  /* A setup prompt at the foot of the catalog, in the flow.
+
+     It used to be position:fixed in the bottom-right corner at 340px and
+     z-index 90, which parked it on top of the content column for as long as
+     setup was undone — and because dismissal is deliberately not persisted
+     (see the note below), it came back over the same content on every reload.
+     A prompt that occludes the thing it is prompting you to fill is worse than
+     one you have to scroll to. In the flow it interrupts nothing.
+
+     The catalog has already spent its one accent on the library — the
+     recording dot and the progress fill — so this panel is deliberately quiet:
+     --surface, one hairline, radius 0, a mono caps label and a secondary
+     button. No hue and no shadow: depth is a surface step plus a border, and
+     this panel is not more important than the shelf above it.
+
+     Page-local CSS is layout only. .panel, .label, .panel-title, .notice,
+     .button and .modal-close all come from static/captcher.css. */
+  .ext-panel { position:relative; max-width:560px; margin:var(--s7) 0 0;
+               display:flex; flex-direction:column; gap:var(--s3); }
+  .ext-panel[hidden] { display:none; }
+  .ext-panel .modal-close { position:absolute; top:var(--s4); right:var(--s4); }
+  .ext-panel .panel-title { padding-right:var(--s6); }
+  .ext-panel .ext-body { font-size:var(--type-small); line-height:1.55; color:var(--text-soft); }
+  .ext-panel .button { align-self:flex-start; }
+  .ext-panel .ext-actions { display:flex; gap:var(--s3); flex-wrap:wrap; }
+</style>
+<aside class="panel ext-panel" id="ext-toast" hidden aria-label="Browser extension">
+  <button type="button" class="modal-close" id="ext-close" aria-label="Dismiss">&#10005;</button>
+  <p class="label">Browser extension</p>
+  <h2 class="panel-title">Record walkthroughs as you work</h2>
+  <p class="ext-body">The recorder sits beside your product and keeps each screen while you
+    perform the task. Install it, open its side panel, and press
+    <strong>Connect this browser</strong> — Captcher hands it a key from there, so there
+    is nothing to copy and nothing to configure.</p>
+  <div class="notice">It comes with Captcher, as a folder you load into Chrome. The setup
+    guide shows where it is and walks through it.</div>
+  <div class="ext-actions">
+    <a class="button button--secondary button--sm" href="/extension">Set up the Chrome extension</a>
+  </div>
+</aside>
+<script>
+(function () {
+  /* The prompt is a setup prompt, so it lives exactly as long as setup is
+     undone. What ends it is the extension announcing itself, not the viewer
+     clicking the close button: dismissal is deliberately not persisted, so a
+     refresh brings the prompt back while the extension is still missing.
+
+     The extension's announce.js sets this attribute at document_start, which
+     is before this script runs. A web page cannot ask Chrome what is
+     installed, so this handshake is the only signal available — an extension
+     older than it simply doesn't announce, and the prompt keeps showing.
+
+     The marker (data-captcher-capture) and the event name
+     (captcher:capture-present) are a WIRE CONTRACT with announce.js in
+     the extension repo. Both
+     ends have to move in the same release: an extension still announcing the
+     old names is invisible to this check, and the prompt keeps showing for
+     everyone who has not updated. That is the deliberate cost of dropping the
+     aliases — it is loud and self-correcting, where a silent half-rename
+     would not be.
+
+     Hidden in the markup and revealed here so it never flashes for someone who
+     already has the extension. */
+  var panel = document.getElementById("ext-toast");
+  if (document.documentElement.dataset.captcherCapture) return;
+  panel.hidden = false;
+  document.getElementById("ext-close").addEventListener("click", function () {
+    panel.hidden = true;
+  });
+  /* The announcer can also arrive after load, on a tab that was already open
+     when the extension was first pointed at this server. */
+  document.addEventListener("captcher:capture-present", function () {
+    panel.hidden = true;
+  });
+
+  /* There is deliberately no Connect button here. Connecting is done from the
+     extension's side panel, which is the only surface that can see which tab is
+     open and act on it; a second button on this page would be a second place to
+     try, and the one that cannot work from a clean install. This prompt asks
+     people to install, and says where to go next. */
+})();
+</script>

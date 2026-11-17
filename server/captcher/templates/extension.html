@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Chrome extension — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+__THEME_HEAD__
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  .extension-layout { display:grid; grid-template-columns:minmax(0, 2fr) minmax(240px, 1fr); gap:var(--s6); align-items:start; }
+  .extension-steps, .extension-aside { display:flex; flex-direction:column; gap:var(--s5); min-width:0; }
+  .extension-page .panel { min-width:0; }
+  .extension-page .panel > * + * { margin-top:var(--s4); }
+  .extension-page .panel > .panel-title { margin-top:var(--s2); }
+  .extension-page ol { padding-left:var(--s5); }
+  .extension-page li + li { margin-top:var(--s3); }
+  .extension-page li::marker { color:var(--muted); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
+  .extension-page code { overflow-wrap:anywhere; }
+  .setup-shot { margin:0; min-width:0; }
+  .setup-shot > a { display:block; border:1px solid var(--border); border-radius:var(--radius-control); overflow:hidden; cursor:zoom-in; }
+  .setup-shot img { display:block; width:100%; height:auto; }
+  .setup-shot figcaption { margin-top:var(--s3); color:var(--text-soft); font-size:var(--type-small); line-height:1.6; }
+  .setup-shot figcaption a { white-space:nowrap; }
+  .setup-comparison { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--s4); align-items:start; }
+  @media (max-width:540px) { .setup-comparison { grid-template-columns:minmax(0, 1fr); } }
+  .extension-jumps { display:flex; flex-wrap:wrap; gap:var(--s3) var(--s5); margin-top:var(--s3); font-size:var(--type-small); }
+  .extension-page section[id] { scroll-margin-top:180px; }
+  .extension-page .field-hint { display:block; }
+  .extension-page details { border-top:1px solid var(--border); padding-top:var(--s4); }
+  .extension-page summary { cursor:pointer; font-weight:var(--weight-medium); }
+  .extension-page details p { margin-top:var(--s3); color:var(--text-soft); }
+  @media (max-width:800px) { .extension-layout { grid-template-columns:minmax(0, 1fr); } }
+</style></head><body>
+__TOOLBAR__
+<main class="page extension-page">
+  <div class="page-head">
+    <p class="label">The recorder</p>
+    <h1>Chrome extension</h1>
+    <p class="page-sub">Record a task in your browser and send the captured screens to Captcher.
+      Load the extension into Chrome, then connect it to this Captcher.</p>
+    <nav class="extension-jumps" aria-label="Setup steps">
+      <a href="#install">01 · Install</a>
+      <a href="#connect">02 · Connect</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </nav>
+  </div>
+  <div class="extension-layout">
+    <div class="extension-steps">
+      <section class="panel" id="install" aria-labelledby="install-heading">
+        <p class="label">Step 01 / Install</p>
+        <h2 class="panel-title" id="install-heading">Load the extension into Chrome</h2>
+        <p>Captcher Recorder comes with Captcher, as a folder you load into Chrome.
+          __EXTENSION_DIR__</p>
+        <ol>
+          <li>In Google Chrome, open <code>chrome://extensions</code>.</li>
+          <li>Turn on <strong>Developer mode</strong> (top right).</li>
+          <li>Click <strong>Load unpacked</strong> and choose that folder. It sits inside a hidden
+            folder: on a Mac, press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> in the dialog and
+            paste the path; on Windows or Linux, paste it into the dialog's address bar.</li>
+          <li>Click Chrome's <strong>Extensions</strong> menu (the puzzle-piece icon beside the address bar),
+            then click the pin beside <strong>Captcher Recorder</strong> to keep it on your toolbar.</li>
+        </ol>
+        <p class="field-hint">Chrome does not update an unpacked extension by itself: after updating
+          Captcher, click the reload arrow on the extension's card in <code>chrome://extensions</code>.</p>
+      </section>
+      <section class="panel" id="connect" aria-labelledby="connect-heading">
+        <p class="label">Step 02 / Connect</p>
+        <h2 class="panel-title" id="connect-heading">Connect this browser to Captcher</h2>
+        <ol>
+          <li>Return to this Captcher page in the same Chrome profile where you loaded the extension.</li>
+          <li>Refresh this page after installing, then click the <strong>Captcher Recorder</strong> icon in Chrome's toolbar
+            to open its side panel. Keep this tab active.</li>
+          <li>The panel opens <strong>Set up the recorder</strong> and connects automatically to this page.
+            If you see <strong>Connect this browser</strong>, click it to open setup. If Captcher is not at
+            <code>http://127.0.0.1:8080</code>, enter its address under <strong>Captcher server</strong> and
+            press <strong>Save</strong>.</li>
+          <li>Wait for <strong>Connected</strong> and check the server shown in the panel.
+            The panel then opens the recording controls.</li>
+        </ol>
+        <div class="setup-comparison">
+          <figure class="setup-shot">
+            <a href="/static/extension-setup/recorder-setup-2026-11.png" target="_blank" rel="noopener" aria-label="Open full-size screenshot of recorder setup">
+              <img src="/static/extension-setup/recorder-setup-2026-11.png" width="400" height="711" loading="lazy" decoding="async"
+                alt="Set up the recorder panel showing This browser is not connected yet and the Open Captcher button.">
+            </a>
+            <figcaption><strong>Before connecting.</strong> If you open the panel on another site, click
+              <strong>Open Captcher</strong>. If Captcher is already open in the tab, setup connects automatically.
+              <a href="/static/extension-setup/recorder-setup-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+          </figure>
+          <figure class="setup-shot">
+            <a href="/static/extension-setup/recorder-connected-2026-11.png" target="_blank" rel="noopener" aria-label="Open full-size screenshot of the connection confirmation">
+              <img src="/static/extension-setup/recorder-connected-2026-11.png" width="400" height="514" loading="lazy" decoding="async"
+                alt="Recorder panel showing Connected, with the server it is connected to.">
+            </a>
+            <figcaption><strong>Connection confirmed.</strong> Look for <strong>Connected</strong> and the
+              server's address. The recording controls appear next.
+              <a href="/static/extension-setup/recorder-connected-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+          </figure>
+        </div>
+        <p>You do not need to paste an address, token or API key. Each connected browser receives its own key.</p>
+        <p>You can review or revoke connected browsers on the <a href="/account">Settings page</a>.</p>
+      </section>
+    </div>
+    <aside class="extension-aside" aria-label="Setup help">
+      <section class="panel">
+        <p class="label">Before you start</p>
+        <h2 class="panel-title">What you need</h2>
+        <p>Google Chrome on a desktop or laptop, Captcher running, and permission to load
+          extensions in your Chrome profile.</p>
+        <p class="field-hint">If your organization manages Chrome and restricts which extensions
+          can be installed, ask your administrator to allow Captcher Recorder.</p>
+      </section>
+      <section class="panel">
+        <p class="label">After connecting</p>
+        <h2 class="panel-title">Record your first walkthrough</h2>
+        <p>Open the web application you want to teach. Keep the recorder's side panel open,
+          enter a walkthrough title, and click <strong>Start recording</strong>.</p>
+        <figure class="setup-shot">
+          <a href="/static/extension-setup/recorder-ready-2026-11.png" target="_blank" rel="noopener" aria-label="Open full-size screenshot of the recording controls">
+            <img src="/static/extension-setup/recorder-ready-2026-11.png" width="400" height="385" loading="lazy" decoding="async"
+              alt="Record a walkthrough panel with a walkthrough title field and the Start recording button.">
+          </a>
+          <figcaption><strong>Ready to record.</strong> Add a title and click <strong>Start recording</strong>.
+            <a href="/static/extension-setup/recorder-ready-2026-11.png" target="_blank" rel="noopener">View full size</a>.</figcaption>
+        </figure>
+        <p>Perform the task, then click <strong>Finish &amp; submit</strong>. Wait for the upload to finish,
+          then open <a href="/">Walkthroughs</a> to find your capture and author it with AI.</p>
+        <p>Follow <a href="/getting-started">Getting started</a> for the full recording-to-sharing tutorial.</p>
+      </section>
+      <section class="panel" id="troubleshooting" aria-labelledby="help-heading">
+        <p class="label">Setup help</p>
+        <h2 class="panel-title" id="help-heading">Troubleshooting</h2>
+        <details>
+          <summary>Load unpacked is missing or blocked</summary>
+          <p>Turn on <strong>Developer mode</strong> in <code>chrome://extensions</code> first. If your
+            organization manages Chrome, it may block unpacked extensions; ask your administrator.</p>
+        </details>
+        <details>
+          <summary>The extension icon is missing</summary>
+          <p>Open <code>chrome://extensions</code> and check that <strong>Captcher Recorder</strong> is enabled.
+            Open the Extensions menu beside the address bar and pin <strong>Captcher Recorder</strong>.
+            Check that you are using the Chrome profile where you installed it.</p>
+        </details>
+        <details>
+          <summary>The recorder does not connect</summary>
+          <p>Keep a Captcher page active in the same Chrome profile as the extension, and check
+            that the address under <strong>Captcher server</strong> in the panel is the one in your
+            address bar. Refresh the page, reopen the side panel, and press <strong>Try again</strong>
+            if it appears. Chrome's Extensions page cannot complete the connection.</p>
+        </details>
+        <details>
+          <summary>I need to update the extension</summary>
+          <p>If the side panel says a newer version is required, finish and submit any recording
+            first, then click the reload arrow on <strong>Captcher Recorder</strong> in
+            <code>chrome://extensions</code>. Refresh your Captcher tab and reopen the side panel.</p>
+          <p>If setup appears again, follow the connection steps above.</p>
+        </details>
+      </section>
+    </aside>
+  </div>
+</main>
+</body></html>

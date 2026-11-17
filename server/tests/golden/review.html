@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Review — Captcher</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F2F3F7">
+<!-- Appearance, resolved before the first paint.
+
+     This must be an INLINE, synchronous script in <head>. An external file, a
+     defer, or anything that runs after the body parses means the page paints
+     in the wrong theme first and flips — the exact flash a theme toggle exists
+     to avoid. It is small and it does not touch the network, so it costs one
+     parse.
+
+     Three states, not two. Light is the default (Brand Guide v1 is light-first):
+     a browser with nothing stored gets "light". "system" is an explicit choice
+     and is not a value that ever reaches the DOM: the OS answer is resolved
+     here — dark only when the OS asks for dark — and an explicit
+     data-sc-theme="light"|"dark" is stamped on <html>, so the stylesheet only
+     needs its one [data-sc-theme="dark"] block and no prefers-color-scheme
+     media query has to be kept in step with it.
+
+     The choice lives in localStorage, per browser, alongside the catalog's
+     sc-collections-collapsed. The key is unchanged from earlier releases, so a
+     stored "system" or "dark" is honoured. Nothing is sent to the server and
+     nothing is read from the member row, so this file is the whole of the
+     mechanism and a signed-out page could adopt it unchanged.
+
+     Storage can throw outright — Safari in private browsing, and any browser
+     set to block site data — so every access is wrapped. A failed read is
+     "light", which is the same answer a first visit gets. -->
+<script>
+(function () {
+  var KEY = "sc-theme";
+  var root = document.documentElement;
+  var media = window.matchMedia("(prefers-color-scheme: dark)");
+  var choice;
+  try { choice = localStorage.getItem(KEY); } catch (e) { choice = null; }
+  if (choice !== "system" && choice !== "dark") choice = "light";
+
+  function paint() {
+    var resolved = choice === "system" ? (media.matches ? "dark" : "light") : choice;
+    root.setAttribute("data-sc-theme", resolved);
+    // The browser paints its own chrome (the address bar on mobile, the space
+    // beyond an overscroll) from this, so a stale one leaves a dark band above
+    // a light page.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#F2F3F7" : "#0F1117");
+    root.dispatchEvent(new CustomEvent("sc:theme", { detail: { choice: choice, resolved: resolved } }));
+  }
+  paint();
+
+  // Follow the OS live, but only while the choice is System — someone who
+  // picked Dark explicitly does not want their laptop's sunrise schedule
+  // overruling them. addListener is the pre-2021 Safari spelling.
+  var onSystemChange = function () { if (choice === "system") paint(); };
+  if (media.addEventListener) media.addEventListener("change", onSystemChange);
+  else if (media.addListener) media.addListener(onSystemChange);
+
+  // The only writer is the Appearance control on /account. Exposed on window
+  // rather than imported because every page carries this script and only one
+  // page has a control; there is no module system here to hang it off.
+  window.scTheme = {
+    get: function () { return choice; },
+    set: function (next) {
+      choice = (next === "system" || next === "dark") ? next : "light";
+      try { localStorage.setItem(KEY, choice); } catch (e) {}
+      paint();
+      return choice;
+    }
+  };
+})();
+</script>
+
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon-180.png">
+<!-- font-preload: start the two faces every page paints in downloading
+     alongside fonts.css rather than after the browser has parsed it. Without
+     these the chain is HTML -> fonts.css -> woff2, three serial round trips
+     before a real glyph appears, and the page shows system sans until the
+     last one lands. DM Sans is the body; Outfit (one variable file) sets every heading above it.
+     export.py strips this block: the offline builds inline or relocate their
+     fonts, so these hrefs would be dead there. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/captcher.css">
+<style>
+  /* Page-local rules are LAYOUT ONLY. Every colour, border weight, radius and
+     type size on this page comes from static/captcher.css. The two
+     exceptions are marked below, and both are frames around a customer's own
+     captured screen — the platform's own ground is not allowed to bleed into
+     a real product. */
+  .page { max-width: 1060px; }
+
+  /* .inline-status aligns to the top of its first line so long messages wrap
+     under themselves; the 8px status dot has to be pushed down to the
+     line's optical centre or it hangs above the cap height. */
+  .inline-status .dot { margin-top: 5px; }
+
+  .rv-bar { display: flex; align-items: center; gap: var(--s3);
+            flex-wrap: wrap; margin-bottom: var(--s6); }
+
+  .rv-card { margin-bottom: var(--s4); }
+  .rv-ident { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+  .rv-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rv-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+             gap: var(--s5); align-items: start; }
+
+  /* Exception 1: the preview holds a captured page, so its frame stays
+     neutral and square — radius is 0 against a captured screen. */
+  /* Literal white behind the frame, never a surface token: what sits inside
+     this border is the recorded product, and a themed ground would tint it.
+     The border itself is chrome, so it is the system hairline. */
+  .rv-preview { height: 340px; overflow: hidden; border: 1px solid var(--border);
+                border-radius: 0; background: #FFFFFF; }
+  .rv-preview iframe { width: 1280px; border: 0; pointer-events: none;
+                       transform-origin: 0 0; }
+
+  .rv-acts { display: flex; flex-direction: column; gap: 10px; }
+  .rv-list { margin: 0; padding-left: var(--s5); }
+  .rv-list li { margin-bottom: var(--s2); }
+
+  .rv-shots { margin-top: var(--s4); padding-top: 14px; }
+  .rv-verdict { display: flex; align-items: center; gap: 10px;
+                flex-wrap: wrap; margin-bottom: 10px; }
+  .rv-diffs { margin: var(--s2) 0 0; padding-left: 18px; }
+  .rv-diffs li { margin-bottom: var(--s1); }
+  .rv-shot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .rv-shot-grid figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  /* Exception 2: same rule as .rv-preview — these are real captured frames. */
+  .rv-shot-grid img { width: 100%; display: block; border: 1px solid var(--border);
+                      border-radius: 0; background: #FFFFFF; }
+
+  @media (max-width: 820px) {
+    .rv-body { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .rv-shot-grid { grid-template-columns: 1fr; }
+  }
+</style></head><body>
+<header class="site-header app-sidebar" id="top">
+  <div class="nav-wrap">
+    <a class="brand-lockup" href="/" aria-label="Captcher home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 526 526" fill="none" aria-hidden="true" class="brand-svg" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTowNTFmMGY1YS03N2FlLTQ0YzUtYjc4OC02NjNlMDg4ZjJiYzgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaBtVtipGlWp5nkJeoDcMkPYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyNzIyNWFhOC0xNThkLTQxNWUtYjY5Ny01MWZiZDljNjZjNGFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo7ngJcOiuhiHL9la+jaJ1fwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggG3czPT5AiP7z/ZvL4WIYhLL1Jacc9HCfLWG/wKA51aOkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaKNZQnzAKKVSE9WaR7PCUxkAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCCdBgmDtiH2w62FT8QpfO9fI40+0uIX5AtKqMTm0RrCA2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBjLZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjA1MWYwZjVhLTc3YWUtNDRjNS1iNzg4LTY2M2UwODhmMmJjOC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmJiOWVkMTAwLThhNTgtNDg4OS1iZGFlLTJkODYxYTQ3YzYwY3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAbdzM9PkCI/vP9m8vhYhiEsvUlpxz0cJ8tYb/AoDnVo6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggTcuhKrTf5FatlZvCygCuGf36PEOCDnZpPu0XRtuR9v6iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIPb3KywRlkOpXUuKc8sfaBYoX8RVmVodGy0tFE4ySBN0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQCvByNMV60jXCO+oiBC+FzL+S12xWLwDhVS452/dLe6ZGeJzH94HZ9LsnMtHFV+tmHowdwx7vgwNNZdr9YvKWys=</c2pa:manifest></metadata><rect x="230" y="0" width="296" height="50" fill="currentColor"/><rect x="476" y="0" width="50" height="270" fill="currentColor"/><rect x="0" y="256" width="50" height="270" fill="currentColor"/><rect x="0" y="476" width="296" height="50" fill="currentColor"/><rect x="0" y="0" width="72" height="72" fill="#FF6A5C"/><rect x="92" y="92" width="90" height="90" fill="#29B6FF"/><rect x="202" y="202" width="122" height="122" fill="#3B49C6"/><rect x="344" y="344" width="90" height="90" fill="#3ECFA2"/><rect x="454" y="454" width="72" height="72" fill="#FF6A5C"/></svg>
+<span class="brand-word">Captcher</span></a>
+    <nav class="nav-right" aria-label="Main navigation">
+      <a class="nav-link active" href="/" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M10 8.8v6.4l5.2-3.2z"/></svg>Walkthroughs</a>
+      <a class="nav-link" href="/branding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21a9 9 0 1 1 9-9c0 2.2-1.8 3.5-4 3.5h-1.8a1.7 1.7 0 0 0-1.3 2.8 1.7 1.7 0 0 1-1.3 2.7z"/><circle cx="7.5" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r=".9" fill="currentColor" stroke="none"/></svg>Brand profile</a>
+      <a class="nav-link" href="/getting-started"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-5A1.5 1.5 0 0 1 3 16z"/><path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>Getting started</a>
+      <a class="nav-link" href="/extension"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4.5a2.5 2.5 0 0 1 5 0V6h3a1 1 0 0 1 1 1v3h1.5a2.5 2.5 0 0 1 0 5H18v3a1 1 0 0 1-1 1h-3v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3z"/></svg>Chrome extension</a>
+      <a class="nav-link" href="/account"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.75"/><path d="M4.75 20a7.25 7.25 0 0 1 14.5 0"/></svg>Settings</a>
+      <a class="nav-link" href="/usage"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>AI spend</a>
+    </nav>
+  </div>
+</header>
+<!-- Pairing lives on the shared chrome rather than on /account, so the
+     extension can start pairing from whichever Captcher page is open instead
+     of first telling them to navigate somewhere. It adds no UI and does
+     nothing until asked. The unlock page has no sidebar, so a locked server
+     cannot answer — which is correct, since it has no owner to mint for. -->
+<script src="/static/pair.js"></script>
+
+<main class="page">
+  <div class="page-head">
+    <div class="label" id="r-meta">CAPTURE REVIEW</div>
+    <h1 id="r-title">Loading&hellip;</h1>
+    <p class="page-sub">Every page captured for this walkthrough, with the actions recorded on
+       it &mdash; the authoring pass works from exactly this. Previews are frozen; open a page
+       full size to inspect it.</p>
+  </div>
+  <div class="rv-bar" id="rcheck-bar" hidden>
+    <button id="rcheck-run" class="button button--primary" type="button">Check render accuracy</button>
+    <button id="vr-run" class="button button--secondary" type="button"
+      title="Replays every step in the player, spotlights its target, and checks that the target is visible and correct. Failing targets get one automatic repair pass.">Verify replay</button>
+    <p id="rcheck-status" class="inline-status inline-status--muted">Each check calls the Anthropic API with your key.</p>
+  </div>
+  <div id="pages"></div>
+</main>
+<script>
+(async function () {
+  var ID = "<UUID>";
+  // Whether this server can run the render and replay checks ([verify] extra).
+  var CHECKS = {"ready": <READY>, "help": "Render and replay checks need Playwright and a headless Chromium. Reinstall Captcher with its verify extra (uv tool install --force \"captcher[verify] @ git+https://github.com/wwiens/captcher#subdirectory=server\"), then run: captcher install-browser (a download of about 200 MB)"};
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  };
+  // Countable things are mono, everywhere: page numbers, counts, timestamps,
+  // selectors, folder names.
+  var mono = function (s) { return '<span class="mono">' + esc(s) + "</span>"; };
+  var pad = function (n) { return n < 10 ? "0" + n : String(n); };
+  // Status is the system's 8px dot, never a glyph and never an emoji —
+  // .dot and its modifiers come from captcher.css. The tone also colours
+  // the text, so the square is decoration for a state the words already carry
+  // and is hidden from assistive tech.
+  var DOT = { success: "dot--published", error: "dot--error", muted: "dot--idle" };
+  // html is trusted markup the caller has already escaped.
+  var setStatus = function (el, tone, html) {
+    el.className = "inline-status" + (tone === "success" ? "" : " inline-status--" + tone);
+    el.innerHTML = '<span class="dot ' + DOT[tone] + '" aria-hidden="true"></span><span>' + html + "</span>";
+  };
+  var box = document.getElementById("pages");
+  var cap;
+  try {
+    // walkthrough.json is the canonical manifest name, but captures placed on
+    // disk by hand may still use the legacy lesson.json: the rename only
+    // happens during ZIP extraction (ingest.extract_capture_zip), never for a
+    // folder that was copied in. ingest.convert() falls back the same way.
+    var base = "/capture/" + encodeURIComponent(ID) + "/";
+    var r = await fetch(base + "walkthrough.json");
+    if (!r.ok) r = await fetch(base + "lesson.json");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    cap = await r.json();
+  } catch (e) {
+    document.getElementById("r-title").textContent = ID;
+    box.innerHTML =
+      '<div class="error-panel">' +
+        '<div class="error-panel-title">This walkthrough has no capture manifest</div>' +
+        '<div class="error-panel-body">There is nothing to review: the manifest that lists the ' +
+          "captured pages could not be read. A walkthrough authored without a raw capture never " +
+          "had one, and a capture folder that was moved or renamed no longer resolves. Record " +
+          "the walkthrough again, or restore its capture folder, then reload this page.</div>" +
+        '<div class="error-panel-meta">' + esc(base + "walkthrough.json") +
+          " · " + esc(e.message || e) + "</div>" +
+      "</div>";
+    return;
+  }
+
+  // The capture sequence: the initial page, then one entry per navigation.
+  // An entry's recorded actions were performed BEFORE it was captured, i.e.
+  // on the PREVIOUS page — the same attachment rule ingest.py uses. So the
+  // actions shown under page i come from capture entry i+1.
+  var captures = [];
+  var pushCapture = function (s, actions) {
+    if (!s || !s.folder) return;
+    // Screenshots are additive @1 metadata: steps carry files.screenshot,
+    // initialCapture (no files dict) a sibling `screenshot` field.
+    var shotName = (s.files && s.files.screenshot) || s.screenshot || null;
+    captures.push({
+      folder: s.folder,
+      html: s.folder + "/" + ((s.files && s.files.html) || "page.html"),
+      shot: shotName ? s.folder + "/" + shotName : null,
+      pageTitle: s.pageTitle || "",
+      url: s.url || "",
+      actions: actions || []
+    });
+  };
+  pushCapture(cap.initialCapture, []);
+  (cap.steps || []).forEach(function (s) { pushCapture(s, s && s.actions); });
+
+  var totalActions = captures.reduce(function (n, c) { return n + c.actions.length; }, 0);
+  document.getElementById("r-title").textContent = cap.title || ID;
+  var when = cap.createdAt ? new Date(cap.createdAt) : null;
+  // A mono caps line of counts: machine output, not a sentence.
+  var metaBits = [
+    captures.length + " PAGE" + (captures.length === 1 ? "" : "S"),
+    totalActions + " ACTION" + (totalActions === 1 ? "" : "S") + " RECORDED"
+  ];
+  if (when && !isNaN(when)) metaBits.push("CAPTURED " + when.toLocaleString());
+  document.getElementById("r-meta").textContent = metaBits.join(" · ");
+
+  var describe = function (a) {
+    var el = mono(a.element || "element");
+    if (a.type === "click")
+      return "Click " + el + (a.label ? " “" + esc(a.label) + "”" : "");
+    if (a.type === "select")
+      return "Select “" + esc(a.value || "") + "”";
+    if (a.type === "input")
+      return "Type “" + esc(a.value || "") + "” into " + el;
+    return esc(a.type || "action") + " on " + el +
+      (a.label ? " “" + esc(a.label) + "”" : "");
+  };
+
+  if (!captures.length) {
+    box.innerHTML =
+      '<div class="error-panel">' +
+        '<div class="error-panel-title">The capture manifest lists no pages</div>' +
+        '<div class="error-panel-body">The manifest was read, but it holds neither an initial ' +
+          "capture nor any steps, so the recording stopped before its first page was captured. " +
+          "Record the walkthrough again to produce pages to review.</div>" +
+      "</div>";
+    return;
+  }
+  captures.forEach(function (c, i) {
+    // actions performed on this page = recorded before the NEXT capture
+    var acts = i + 1 < captures.length ? captures[i + 1].actions : [];
+    var last = i + 1 === captures.length;
+    // folder names may contain spaces/unicode ("00 - Initial state")
+    var src = "/capture/" + encodeURIComponent(ID) + "/" + encodeURI(c.html);
+    var card = document.createElement("div");
+    card.className = "panel rv-card";
+    card.innerHTML =
+      '<div class="panel-head">' +
+        '<div class="rv-ident">' +
+          '<div class="label">PAGE ' + pad(i + 1) + " / " + pad(captures.length) + "</div>" +
+          '<h2 class="panel-title">' +
+            (c.pageTitle ? esc(c.pageTitle) : "Untitled page") + "</h2>" +
+          '<div class="rv-url mono small muted">' + esc(c.url || c.folder) + "</div>" +
+        "</div>" +
+        '<a class="button button--tertiary button--sm" href="' + esc(src) +
+          '" target="_blank" rel="noopener">Open full size</a>' +
+      "</div>" +
+      '<div class="rv-body">' +
+        '<div class="rv-preview"><iframe loading="lazy" src="' + esc(src) + '"></iframe></div>' +
+        '<div class="rv-acts"><div class="label">Actions on this page</div>' +
+          (acts.length
+            ? '<ol class="rv-list small">' +
+                acts.map(function (a) { return "<li>" + describe(a) + "</li>"; }).join("") + "</ol>"
+            : '<div class="inline-status inline-status--muted">' +
+                '<span class="dot ' + DOT.muted + '" aria-hidden="true"></span><span>' + (last
+                ? "None. This is the final page, and the authoring pass ends the walkthrough " +
+                  "here with a verify step."
+                : "None were recorded before the next page load.") + "</span></div>") +
+        "</div>" +
+      "</div>" +
+      (c.shot ? '<div class="rv-shots rule" data-page="' + esc(c.html) +
+                '" data-shot="' + esc(c.shot) + '"></div>' : "");
+    box.appendChild(card);
+  });
+
+  // ---- render-accuracy check: capture screenshot vs the player's render ----
+  var capBase = "/capture/" + encodeURIComponent(ID) + "/";
+  var apiRC = "/api/walkthroughs/" + encodeURIComponent(ID) + "/render-check";
+  var check = null;       // the sidecar verdicts (pages keyed by rel), or null
+  // Verdicts are mono caps pills: lifecycle, stated as machine output. Success
+  // is the green pill; "minor" takes the yellow draft pill; a failure takes the
+  // pink error pill. None of them is ever the accent — the accent means "look
+  // here", and a verdict is a fact rather than an instruction.
+  var verdictLabel = { ok: "RENDERS OK", minor: "MINOR DIFFERENCES",
+                       broken: "RENDER BROKEN", error: "CHECK FAILED" };
+  var verdictPill = { ok: "pill--success", minor: "pill--draft", broken: "pill--error" };
+
+  var refreshShots = function () {
+    var stamp = (check && check.checked_at) || "";
+    document.querySelectorAll(".rv-shots").forEach(function (node) {
+      var page = node.getAttribute("data-page");
+      var shot = node.getAttribute("data-shot");
+      var v = check && check.pages && check.pages[page];
+      var html = "";
+      if (v && v.status && v.status !== "no-baseline") {
+        var cls = verdictPill[v.status] || "pill--error";
+        html += '<div class="rv-verdict"><span class="pill ' + cls + '">' +
+          esc(verdictLabel[v.status] || String(v.status).toUpperCase()) + "</span>";
+        if (v.alias_of)
+          html += '<span class="small muted">Same page as ' + mono(v.alias_of) + "</span>";
+        html += "</div>";
+        if (v.error) {
+          html += '<div class="inline-status inline-status--error">' +
+            '<span class="dot ' + DOT.error + '" aria-hidden="true"></span><span>' +
+            esc(v.error) + "</span></div>";
+        }
+        if (v.differences && v.differences.length) {
+          html += '<ul class="rv-diffs small">' + v.differences.map(function (d) {
+            return "<li>" + esc(d) + "</li>";
+          }).join("") + "</ul>";
+        }
+      }
+      html += '<div class="rv-shot-grid">' +
+        '<figure><figcaption class="label">At capture</figcaption>' +
+          '<img loading="lazy" src="' + esc(capBase + encodeURI(shot)) + '" alt="Capture-time screenshot"></figure>' +
+        (v && v.render
+          ? '<figure><figcaption class="label">Player render</figcaption>' +
+            '<img loading="lazy" src="' + esc(capBase + encodeURI(v.render)) +
+            "?t=" + encodeURIComponent(stamp) + '" alt="Player render screenshot"></figure>'
+          : '<figure><figcaption class="label">Player render</figcaption>' +
+            '<div class="empty"><div class="empty-title">Not rendered yet</div>' +
+            '<div class="empty-body">The render check has not run for this page. ' +
+            "Run it from the top of the page to compare it with its capture.</div></div></figure>") +
+        "</div>";
+      node.innerHTML = html;
+    });
+  };
+
+  // ---- replay verification: probe + spotlight every step, judge, repair ----
+  var vrRun = document.getElementById("vr-run");
+  vrRun.addEventListener("click", async function () {
+    var rcheckStatusEl = document.getElementById("rcheck-status");
+    vrRun.disabled = true;
+    setStatus(rcheckStatusEl, "muted",
+      "Replay is running. Every step is replayed in the player, its target spotlighted " +
+      "and checked. This takes a few minutes.");
+    try {
+      var r = await fetch("/api/walkthroughs/" + encodeURIComponent(ID) +
+                          "/verify-replay", { method: "POST" });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+      var counts = { ok: 0, flagged: 0, missing: 0, error: 0 };
+      Object.keys(j.steps || {}).forEach(function (k) {
+        var s = j.steps[k].status;
+        if (counts[s] != null) counts[s]++;
+      });
+      var flagged = counts.missing + counts.flagged;
+      setStatus(rcheckStatusEl, flagged || counts.error ? "error" : "success",
+        "Replay checked. " + mono(counts.ok) + " verified, " + mono(flagged) +
+        " flagged, " + mono(counts.error) + " unchecked." +
+        (j.repaired ? " One automatic repair pass ran." : ""));
+    } catch (e) {
+      setStatus(rcheckStatusEl, "error",
+        "The replay check did not finish: " + esc(e.message || e) +
+        ". Run it again; if it stops at the same point, open this walkthrough in the " +
+        "player to see which step blocks it.");
+    } finally {
+      vrRun.disabled = false;
+    }
+  });
+
+  if (captures.some(function (c) { return c.shot; })) {
+    document.getElementById("rcheck-bar").hidden = false;
+    var rcheckStatus = document.getElementById("rcheck-status");
+    var rcheckRun = document.getElementById("rcheck-run");
+    fetch(apiRC).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.pages) {
+          check = j;
+          if (CHECKS.ready) setStatus(rcheckStatus, "muted", j.checked_at
+            ? "Last checked " + mono(new Date(j.checked_at).toLocaleString()) + "."
+            : "Checked earlier; the run did not record a time.");
+        }
+        refreshShots();
+      }).catch(function () { refreshShots(); });
+    rcheckRun.addEventListener("click", async function () {
+      rcheckRun.disabled = true;
+      setStatus(rcheckStatus, "muted",
+        "The render check is running. Each captured page is re-rendered in the player and " +
+        "compared with its capture-time screenshot. This takes a minute or two.");
+      try {
+        var r = await fetch(apiRC, { method: "POST" });
+        var j = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+        check = j;
+        var counts = { ok: 0, minor: 0, broken: 0 };
+        Object.keys(j.pages || {}).forEach(function (k) {
+          var s = j.pages[k].status;
+          if (counts[s] != null) counts[s]++;
+        });
+        setStatus(rcheckStatus, counts.broken ? "error" : "success",
+          "Render check complete. " + mono(counts.ok) + " render correctly, " +
+          mono(counts.minor) + " differ slightly, " + mono(counts.broken) + " are broken.");
+      } catch (e) {
+        setStatus(rcheckStatus, "error",
+          "The render check did not finish: " + esc(e.message || e) +
+          ". Run it again; if it fails the same way, the capture folder for this " +
+          "walkthrough cannot be read from disk.");
+      } finally {
+        rcheckRun.disabled = false;
+        refreshShots();
+      }
+    });
+  } else {
+    refreshShots();
+  }
+  // Without Playwright the buttons stay, disabled, with the way to enable
+  // them: hiding them would leave nobody knowing the checks exist.
+  if (!CHECKS.ready) {
+    ["rcheck-run", "vr-run"].forEach(function (id) {
+      var b = document.getElementById(id);
+      b.disabled = true;
+      b.title = CHECKS.help;
+    });
+    setStatus(document.getElementById("rcheck-status"), "muted", esc(CHECKS.help));
+  }
+  if (captures[0] && captures[0].actions.length) {
+    var stray = document.createElement("div");
+    stray.className = "notice notice--error rv-card";
+    stray.innerHTML = mono(captures[0].actions.length) +
+      " actions were recorded before the first page was captured, so they have no page to " +
+      "attach to and the authoring pass will not see them. Record the walkthrough again if " +
+      "those actions belong in it.";
+    box.insertBefore(stray, box.firstChild);
+  }
+
+  var fit = function () {
+    document.querySelectorAll(".rv-preview").forEach(function (p) {
+      var f = p.querySelector("iframe");
+      var s = p.clientWidth / 1280;
+      f.style.transform = "scale(" + s + ")";
+      f.style.height = Math.ceil(p.clientHeight / s) + "px";
+    });
+  };
+  window.addEventListener("resize", fit);
+  fit();
+})();
+</script>
+
+<script>
+  (function () {
+    var h = document.querySelector(".site-header");
+    if (!h) return;
+    var onScroll = function () { h.classList.toggle("scrolled", window.scrollY > 10); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  })();
+</script>
+
+</body></html>

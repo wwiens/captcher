@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Captcher</title>
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<!-- font-preload: DM Sans for the body, Outfit Black for headings and the wordmark.
+     export.py strips this block for offline exports. -->
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/outfit-latin-900.woff2" as="font" type="font/woff2" crossorigin>
+<!-- /font-preload -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/player2.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ======== INTRO (popup over the already-running walkthrough) ======== -->
+  <div id="intro-modal" class="modal-backdrop hidden">
+    <div class="modal-card intro-card modal-intro" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+      <button class="modal-close intro-modal-close" onclick="exitIntro()" aria-label="Close and return to the catalog">✕</button>
+      <!-- The mark is drawn in CSS (see .brand-mark): the frame follows the
+           text colour, the five squares keep their brand colours. .brand-logo-slot is the hook
+           export.apply_branding() replaces with a customer's own logo — it is
+           never painted itself. -->
+      <div class="brand intro-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <svg class="brand-logo-slot" width="0" height="0" viewBox="0 0 2 1" aria-hidden="true"><rect x="0" y="0" width="1" height="1" fill="none"/><rect x="1" y="0" width="1" height="1" fill="none"/></svg>
+        <span class="brand-word">Captcher</span>
+      </div>
+      <div class="eyebrow" id="intro-track"></div>
+      <h1 id="intro-title"></h1>
+      <p class="scenario" id="intro-scenario"></p>
+      <!-- Temporarily hidden; keep the objectives and binding in place so this section can return later. -->
+      <div class="objectives hidden">
+        <div class="obj-label">In this walkthrough you will:</div>
+        <ul id="intro-objectives"></ul>
+      </div>
+      <div class="intro-actions">
+        <button class="btn btn-primary" onclick="dismissIntro('show')">Start</button>
+        <button class="btn btn-secondary" onclick="dismissIntro('try')">You try</button>
+        <a id="intro-close" class="btn btn-secondary" href="/">Close</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== PLAYER ======== -->
+  <div id="player" class="screen">
+    <!-- A 48px bar on --surface under one 1px hairline. Left: the mark and the
+         walkthrough's title. Right: the mode toggle, the demo speed, the mono
+         step readout, the 96px progress bar and the controls, ending in ✕. -->
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <svg class="brand-logo-slot" width="0" height="0" viewBox="0 0 2 1" aria-hidden="true"><rect x="0" y="0" width="1" height="1" fill="none"/><rect x="1" y="0" width="1" height="1" fill="none"/></svg>
+          <span class="brand-word">Captcher</span>
+        </span>
+        <span class="tb-divider"></span>
+        <span class="tb-walkthrough" id="tb-title"></span>
+      </div>
+      <div class="tb-right">
+        <div class="tb-mode">
+          <button id="mode-show" class="mode-btn" onclick="switchMode('show')">Show me</button>
+          <button id="mode-try" class="mode-btn" onclick="switchMode('try')">You try</button>
+        </div>
+        <span class="tb-speed" id="tb-speed" title="Demo speed">
+          <input type="range" id="tb-speed-slider" min="0" max="4" step="1" aria-label="Demo speed">
+          <span id="tb-speed-val"></span>
+        </span>
+        <span id="tb-progress"></span>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        <button id="btn-window" class="tb-gear hidden" onclick="toggleWindowView()" title="View the full page">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+        <button id="btn-settings" class="tb-gear" onclick="openSettings()" title="Playback settings" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <a href="/" class="tb-home" title="Back to catalog" aria-label="Back to catalog">✕</a>
+      </div>
+    </header>
+
+    <div class="body">
+      <main class="stage">
+        <div id="sim-wrap"><iframe id="sim" title="Simulated application"></iframe></div>
+
+        <!-- The step card floats over the stage, positioned next to the step's
+             target element (bridge.js reports the rect). It carries everything
+             the old side panel showed a learner: step counter, title,
+             instruction, feedback and the action buttons. -->
+        <div id="step-pop" class="step-pop hidden" role="region" aria-live="polite" aria-label="Current step">
+          <div class="step-eyebrow" id="panel-step-num"></div>
+          <h2 id="panel-title"></h2>
+          <p id="panel-instruction"></p>
+          <div id="panel-feedback" class="feedback hidden"></div>
+          <div class="pop-actions" id="play-actions">
+            <button id="btn-hint" class="btn btn-secondary btn-sm hidden" onclick="giveHint()">Hint</button>
+            <button id="btn-play" class="btn btn-primary btn-sm hidden" onclick="startShowmeNow()">Play step</button>
+            <button id="btn-next" class="btn btn-primary btn-sm hidden" onclick="nextStep()">Continue</button>
+            <a id="btn-catalog" class="btn btn-secondary btn-sm hidden" href="/">Return to catalog</a>
+            <button id="btn-try" class="btn btn-primary btn-sm hidden" onclick="switchMode('try')">You try</button>
+            <button id="btn-replay" class="ghost-btn hidden" onclick="replayStep()" title="Play this step again from the start">Replay</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ======== PLAYBACK SETTINGS MODAL ======== -->
+    <div id="settings-modal" class="modal-backdrop hidden">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-head">
+          <h2 id="settings-title">Playback settings</h2>
+          <button class="modal-close" onclick="closeSettings()" aria-label="Close">✕</button>
+        </div>
+        <p class="modal-sub">Changes apply immediately.</p>
+        <div class="play-settings" id="play-settings">
+          <label class="ps-row">
+            <span class="ps-text">
+              <span class="ps-label">Demo speed</span>
+              <span class="ps-desc">How fast the "Show me" demonstrations play.</span>
+            </span>
+            <select id="opt-speed">
+              <option value="0.5">0.5×</option>
+              <option value="0.75">0.75×</option>
+              <option value="1">1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+          <label class="ps-row">
+            <span class="ps-text">
+              <span class="ps-label">Auto-advance</span>
+              <span class="ps-desc">Move to the next step on its own. Turn off to click Continue yourself.</span>
+            </span>
+            <input type="checkbox" id="opt-auto">
+          </label>
+          <label class="ps-row">
+            <span class="ps-text">
+              <span class="ps-label">Step buttons</span>
+              <span class="ps-desc">Show Play, Continue and Replay buttons in the step card. Off, each step simply plays through on its timers.</span>
+            </span>
+            <input type="checkbox" id="opt-buttons">
+          </label>
+          <label class="ps-row">
+            <span class="ps-text">
+              <span class="ps-label">Reading time</span>
+              <span class="ps-desc">Pause before each demo starts, so you can read the step first. Auto matches the length of the text.</span>
+            </span>
+            <select id="opt-start-delay">
+              <option value="auto">Auto</option>
+              <option value="0">None</option>
+              <option value="1">1s</option>
+              <option value="2">2s</option>
+              <option value="3">3s</option>
+              <option value="5">5s</option>
+              <option value="8">8s</option>
+            </select>
+          </label>
+          <label class="ps-row">
+            <span class="ps-text">
+              <span class="ps-label">Pause between steps</span>
+              <span class="ps-desc">How long to show the result before moving on to the next step.</span>
+            </span>
+            <select id="opt-next-delay">
+              <option value="1">1s</option>
+              <option value="2">2s</option>
+              <option value="3">3s</option>
+              <option value="5">5s</option>
+              <option value="8">8s</option>
+            </select>
+          </label>
+
+          <!-- Everything above is a viewer preference kept in localStorage.
+               This is not: the shape belongs to the walkthrough. This player is
+               playback-only, so the choice is always a session-only override —
+               editing (and saving the shape) happens in the v1 player. -->
+          <div class="ps-group" id="ps-walkthrough-group">
+            <div class="ps-group-label" id="ps-cursor-scope">This session only</div>
+            <label class="ps-row">
+              <span class="ps-text">
+                <span class="ps-label">Show-me cursor</span>
+                <span class="ps-desc">The pointer drawn on the captured page during a demo. Applies to every step.</span>
+              </span>
+              <select id="opt-cursor">
+                <option value="dot">Dot</option>
+                <option value="pointer">Arrow</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== COMPLETE ======== -->
+  <div id="complete" class="screen hidden">
+    <div class="intro-card">
+      <div class="big-check" aria-hidden="true"></div>
+      <h1>Walkthrough complete</h1>
+      <p class="scenario" id="complete-summary"></p>
+      <!-- Temporarily hidden; keep the success criteria and binding in place so this section can return later. -->
+      <div class="objectives hidden">
+        <div class="obj-label">What you accomplished:</div>
+        <ul id="complete-criteria"></ul>
+      </div>
+      <p class="complete-stats" id="complete-stats"></p>
+      <div class="intro-actions">
+        <button class="btn btn-secondary" onclick="startWalkthrough('show')">Replay — Show me</button>
+        <button class="btn btn-primary" onclick="startWalkthrough('try')">Practice again — You try</button>
+        <a id="btn-back-catalog" class="btn btn-secondary" href="/">Back to catalog</a>
+      </div>
+      <div class="tagline">Captcher · One run-through is the training.</div>
+    </div>
+  </div>
+
+
+</div>
+<script src="/static/player2.js"></script>
+</body>
+</html>

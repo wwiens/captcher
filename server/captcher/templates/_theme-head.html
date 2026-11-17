@@ -1,0 +1,67 @@
+<!-- Appearance, resolved before the first paint.
+
+     This must be an INLINE, synchronous script in <head>. An external file, a
+     defer, or anything that runs after the body parses means the page paints
+     in the wrong theme first and flips — the exact flash a theme toggle exists
+     to avoid. It is small and it does not touch the network, so it costs one
+     parse.
+
+     Three states, not two. Light is the default (Brand Guide v1 is light-first):
+     a browser with nothing stored gets "light". "system" is an explicit choice
+     and is not a value that ever reaches the DOM: the OS answer is resolved
+     here — dark only when the OS asks for dark — and an explicit
+     data-sc-theme="light"|"dark" is stamped on <html>, so the stylesheet only
+     needs its one [data-sc-theme="dark"] block and no prefers-color-scheme
+     media query has to be kept in step with it.
+
+     The choice lives in localStorage, per browser, alongside the catalog's
+     sc-collections-collapsed. The key is unchanged from earlier releases, so a
+     stored "system" or "dark" is honoured. Nothing is sent to the server and
+     nothing is read from the member row, so this file is the whole of the
+     mechanism and a signed-out page could adopt it unchanged.
+
+     Storage can throw outright — Safari in private browsing, and any browser
+     set to block site data — so every access is wrapped. A failed read is
+     "light", which is the same answer a first visit gets. -->
+<script>
+(function () {
+  var KEY = "sc-theme";
+  var root = document.documentElement;
+  var media = window.matchMedia("(prefers-color-scheme: dark)");
+  var choice;
+  try { choice = localStorage.getItem(KEY); } catch (e) { choice = null; }
+  if (choice !== "system" && choice !== "dark") choice = "light";
+
+  function paint() {
+    var resolved = choice === "system" ? (media.matches ? "dark" : "light") : choice;
+    root.setAttribute("data-sc-theme", resolved);
+    // The browser paints its own chrome (the address bar on mobile, the space
+    // beyond an overscroll) from this, so a stale one leaves a dark band above
+    // a light page.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#F2F3F7" : "#0F1117");
+    root.dispatchEvent(new CustomEvent("sc:theme", { detail: { choice: choice, resolved: resolved } }));
+  }
+  paint();
+
+  // Follow the OS live, but only while the choice is System — someone who
+  // picked Dark explicitly does not want their laptop's sunrise schedule
+  // overruling them. addListener is the pre-2021 Safari spelling.
+  var onSystemChange = function () { if (choice === "system") paint(); };
+  if (media.addEventListener) media.addEventListener("change", onSystemChange);
+  else if (media.addListener) media.addListener(onSystemChange);
+
+  // The only writer is the Appearance control on /account. Exposed on window
+  // rather than imported because every page carries this script and only one
+  // page has a control; there is no module system here to hang it off.
+  window.scTheme = {
+    get: function () { return choice; },
+    set: function (next) {
+      choice = (next === "system" || next === "dark") ? next : "light";
+      try { localStorage.setItem(KEY, choice); } catch (e) {}
+      paint();
+      return choice;
+    }
+  };
+})();
+</script>

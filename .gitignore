@@ -1,0 +1,52 @@
+# Secrets — never commit credentials.
+# (A comment must be on its own line: git treats a trailing "# ..." as part of
+# the pattern.)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.session_secret
+
+# Local data (Phase 4 onwards keeps it in ~/.captcher, but never commit one here)
+.captcher/
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+build/
+
+# Node
+node_modules/
+
+# Generated export output (export.py / scorm.py CLIs)
+exports/
+
+# A/B authoring runs: real authored output from real captures
+server/evals/out/
+
+# Extension packaging and E2E output
+extension/dist/
+extension/.e2e/
+*.zip
+*.crx
+!examples/**/*.zip
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.smbdelete*
+.vscode/
+.idea/
+*.swp
+*.log
+tmp/
+.claude/settings.local.json

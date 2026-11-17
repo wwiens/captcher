@@ -1,0 +1,7 @@
+
+  /* The top bar's styles moved into static/captcher.css (.site-header,
+     .nav-wrap, .nav-link, .brand-lockup) — it is a core component of the
+     system, not a page-local one, and the marketing site draws the same bar
+     from the same rules.
+
+     Deliberately empty; still inlined by server._chrome(). */

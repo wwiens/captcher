@@ -1,0 +1,73 @@
+[project]
+name = "captcher"
+version = "0.1.0"
+description = "Record a task in the browser and turn it into an interactive training walkthrough."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+# A copy of ../LICENSE, so the wheel and sdist carry the licence text.
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.120",
+    # Optional at runtime (thumbs.py falls back to full-size frames), but small
+    # and nearly always wanted.
+    "Pillow>=10.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/wwiens/captcher"
+Documentation = "https://wwiens.github.io/captcher/"
+Issues = "https://github.com/wwiens/captcher/issues"
+Changelog = "https://github.com/wwiens/captcher/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Render-accuracy and replay checks. After installing, run once:
+#     captcher install-browser
+verify = ["playwright>=1.45"]
+dev = ["pytest>=7.0", "ruff>=0.4", "playwright>=1.45"]
+
+[project.scripts]
+captcher = "captcher.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["captcher"]
+
+# Puts the Chrome extension inside the wheel (see hatch_build.py).
+[tool.hatch.build.hooks.custom]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["captcher", "hatch_build.py", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"          # unchanged from the original repo for now
+exclude = [".venv", "captures", "walkthroughs", "exports", "captcher/templates"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes: undefined names, unused imports/variables
+    "W",      # pycodestyle warnings
+    "B",      # bugbear: likely bugs
+    "UP",     # pyupgrade
+    "C4",     # comprehensions
+]
+ignore = [
+    "E501",   # line length is advisory; long URLs and prose comments
+    "B008",   # function call in default argument — not a pattern used here
+    # B904 (`raise X from err` inside except) is deliberately off: whether each
+    # site should chain or hide the cause is a per-site judgement.
+    "B904",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reassign module globals to point the app at temp trees.
+"tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
