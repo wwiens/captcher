@@ -7,6 +7,8 @@
 - Pages with embedded frames (forms, widgets, ads) no longer lose their
   screenshot: the recorder waits up to two seconds for a still-loading frame,
   and a frame that finishes loading during the shot no longer discards it.
+- A page that is slow to paint gets a second chance before its screenshot is
+  skipped.
 - When a screenshot is skipped, the side panel's log says why.
 
 ## 0.1.0 (server) and 1.1.0 (Captcher Recorder): first open-source release

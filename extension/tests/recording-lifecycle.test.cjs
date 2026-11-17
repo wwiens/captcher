@@ -161,14 +161,14 @@ test('recorder lease expiry stops observation even if timer dispatch is delayed'
   assert.equal(r.messages.length,0);
 });
 
-function screenshot(switchAt,{loadingQueries=0}={}) {
+function screenshot(switchAt,{loadingQueries=0,veilFails=0}={}) {
   const events={onActivated:new Event(),onUpdated:new Event(),onRemoved:new Event()};
   let active=1,captures=0,probes=0,queries=0;const logged=[];
   const switchTab=()=>{active=2;events.onActivated.emit({windowId:5,tabId:2});};
   const chrome={tabs:{...events,query:async()=>[{id:active,url:active===1?'https://app.example/':'https://mail.example/',status:++queries<=loadingQueries?'loading':'complete'}],
     captureVisibleTab:async()=>{captures++;if(switchAt==='capture')switchTab();if(switchAt==='frame-load')events.onUpdated.emit(1,{status:'loading'});if(switchAt==='away-back'){switchTab();active=1;events.onActivated.emit({windowId:5,tabId:1});}return 'data:image/png;base64,AA==';}},
     scripting:{executeScript:async()=>{probes++;return [{documentId:switchAt==='document'&&probes>1?'new':'original',result:{width:800,height:600,dpr:1}}];}}};
-  const context=vm.createContext({chrome,veilShield:async(id,hide)=>{if(hide&&switchAt==='veil')switchTab();return 1;},
+  let veils=0;const context=vm.createContext({chrome,veilShield:async(id,hide)=>{if(hide&&switchAt==='veil')switchTab();if(hide&&++veils<=veilFails)return -1;return 1;},
     log:(m)=>logged.push(m),formatSize:()=>'',fetch:async()=>({blob:async()=>new Blob(['image'])}),Blob,JSON,setTimeout});
   const s=source('sidepanel/panel.js');vm.runInContext(s.slice(s.indexOf('async function takeViewportScreenshot('),s.indexOf('// One capture of `tab`')),context);
   return {events,logged,captures:()=>captures,run:()=>context.takeViewportScreenshot({id:1,windowId:5,url:'https://app.example/'})};
@@ -189,6 +189,13 @@ test('a frame loading during the shot does not discard the screenshot',async()=>
 });
 test('a tab still loading gets a moment to finish before the shot',async()=>{
   const s=screenshot(undefined,{loadingQueries:3});assert.ok((await s.run()).blob);assert.equal(s.captures(),1);
+});
+test('a page that misses one paint still gets its screenshot',async()=>{
+  const s=screenshot(undefined,{veilFails:1});assert.ok((await s.run()).blob);assert.equal(s.captures(),1);
+});
+test('a page that paints nothing for two tries is skipped, with the reason',async()=>{
+  const s=screenshot(undefined,{veilFails:2});assert.equal(await s.run(),null);assert.equal(s.captures(),0);
+  assert.ok(s.logged.some(m=>/painted no frame/.test(m)),s.logged.join(' | '));
 });
 test('a skipped screenshot says why in the log',async()=>{
   const s=screenshot('veil');assert.equal(await s.run(),null);

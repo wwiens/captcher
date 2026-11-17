@@ -833,7 +833,7 @@ async function veilShield(tabId, hidden) {
     });
     return typeof result === "number" ? result : -1;
   } catch {
-    return -1;
+    return -2;   // the page could not be reached at all
   }
 }
 
@@ -973,10 +973,16 @@ async function takeViewportScreenshot(tab) {
     await settle();
     if (!await stillTarget(true)) return await skip("", true);
     const before = await measure();
-    const veiled = await veilShield(tab.id, true);
+    let veiled = await veilShield(tab.id, true);
+    // -1: the notice is set hidden but no frame was painted within the
+    // veil's second. A busy page, or a window Chrome thinks is covered,
+    // can stall frames that long; one more second rescues most of them.
+    if (veiled === -1) veiled = await veilShield(tab.id, true);
     let dataUrl;
     try {
-      if (veiled < 0) return await skip("the capture notice could not be hidden");
+      if (veiled < 0) return await skip(veiled === -2
+        ? "the page could not be reached to hide the capture notice"
+        : "the page painted no frame for 2s, so the capture notice could not be hidden");
       if (!await stillTarget()) return await skip();
       dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     } finally {
