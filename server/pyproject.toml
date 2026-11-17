@@ -1,6 +1,6 @@
 [project]
 name = "captcher"
-version = "0.1.0"
+version = "0.1.1"
 description = "Record a task in the browser and turn it into an interactive training walkthrough."
 readme = "README.md"
 license = "AGPL-3.0-or-later"

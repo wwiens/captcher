@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (server) and 1.1.1 (Captcher Recorder)
+
+A recorder fix release. The server package changes only because the recorder
+ships inside it.
 
 **Recorder**
 
