@@ -114,15 +114,14 @@ def extension_folder():
 # says how to turn them on, wherever the question comes up (the review page,
 # a check that fails to start, the pre-authoring render check).
 
-# The install source is spelled out: until Captcher is on PyPI, a bare
-# 'captcher[verify]' resolves to nothing. Keep it in step with the README's
-# install line (the release checklist lists both).
-INSTALL_SOURCE = "git+https://github.com/wwiens/captcher#subdirectory=server"
+# The same command the README gives under "Optional checks"; a test keeps the
+# two identical, so the app never tells people to run something the docs don't.
+VERIFY_INSTALL = 'uv tool install --force "captcher[verify]"'
 
 VERIFY_HELP = (
     "Render and replay checks need Playwright and a headless Chromium. Reinstall "
-    "Captcher with its verify extra (uv tool install --force "
-    f"\"captcher[verify] @ {INSTALL_SOURCE}\"), then run: captcher install-browser "
+    f"Captcher with its verify extra ({VERIFY_INSTALL}, or pip install "
+    "\"captcher[verify]\"), then run: captcher install-browser "
     "(a download of about 200 MB)")
 
 

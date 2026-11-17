@@ -179,7 +179,7 @@
 (async function () {
   var ID = "<UUID>";
   // Whether this server can run the render and replay checks ([verify] extra).
-  var CHECKS = {"ready": <READY>, "help": "Render and replay checks need Playwright and a headless Chromium. Reinstall Captcher with its verify extra (uv tool install --force \"captcher[verify] @ git+https://github.com/wwiens/captcher#subdirectory=server\"), then run: captcher install-browser (a download of about 200 MB)"};
+  var CHECKS = {"ready": <READY>, "help": "Render and replay checks need Playwright and a headless Chromium. Reinstall Captcher with its verify extra (uv tool install --force \"captcher[verify]\", or pip install \"captcher[verify]\"), then run: captcher install-browser (a download of about 200 MB)"};
   var esc = function (s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];

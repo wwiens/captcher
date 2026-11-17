@@ -28,11 +28,11 @@ fetches Python for you) and desktop Google Chrome.
 1. **Install Captcher**, server and recorder together:
 
    ```bash
-   uv tool install "git+https://github.com/wwiens/captcher#subdirectory=server"
+   uv tool install captcher
    ```
 
-   (`pipx install` works the same way. Once Captcher is on PyPI this becomes
-   `uv tool install captcher`.)
+   (`pipx install captcher` works too. For the unreleased code on `main`:
+   `uv tool install "git+https://github.com/wwiens/captcher#subdirectory=server"`.)
 
 2. **Start it:**
 
@@ -94,7 +94,7 @@ replay every step in a headless browser. That needs Playwright, which is big,
 so it is an extra:
 
 ```bash
-uv tool install --force "captcher[verify] @ git+https://github.com/wwiens/captcher#subdirectory=server"
+uv tool install --force "captcher[verify]"
 captcher install-browser
 ```
 

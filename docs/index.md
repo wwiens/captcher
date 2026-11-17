@@ -19,7 +19,7 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and
 desktop Google Chrome.
 
 ```bash
-uv tool install "git+https://github.com/wwiens/captcher#subdirectory=server"
+uv tool install captcher
 captcher
 ```
 

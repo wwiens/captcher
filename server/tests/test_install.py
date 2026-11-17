@@ -104,12 +104,10 @@ class VerifyStatusTests(unittest.TestCase):
             self.assertEqual(install.install_browser(), 1)
         self.assertIn("captcher[verify]", said.call_args[0][0])
 
-    def test_the_help_names_an_install_source_that_exists_before_pypi(self):
-        # A bare 'captcher[verify]' resolves only once the package is on PyPI.
-        self.assertIn("captcher[verify] @ git+https://github.com/wwiens/captcher#subdirectory=server",
-                      install.VERIFY_HELP)
+    def test_the_help_gives_the_readmes_install_command(self):
+        self.assertIn(install.VERIFY_INSTALL, install.VERIFY_HELP)
         readme = (Path(__file__).resolve().parents[2] / "README.md").read_text(encoding="utf-8")
-        self.assertIn(install.INSTALL_SOURCE, readme)
+        self.assertIn(install.VERIFY_INSTALL, readme)
 
     def test_install_browser_fetches_only_the_headless_shell(self):
         with mock.patch.object(install, "verify_status", return_value="no-chromium"), \
